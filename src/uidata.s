@@ -15,6 +15,7 @@ windows
 
 window0area
 		UIELEMENT_ADD fa1nineslice,				nineslice,			filearea1elements,		 1,  0, 38, 17,  0,		$ffff,						uidefaultflags
+		UIELEMENT_ADD la1nineslice,				nineslice,			listarea1elements,		 1, 20, 78, 20,  0,		$ffff,						uidefaultflags
 		UIELEMENT_END
 
 ; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ scrollbar elements
@@ -26,12 +27,18 @@ filearea1elements
 
 ; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ scrollbar elements
 
-filetabgroup1_data			.word $ffff,														0								; group bitmask
+listarea1elements
+		UIELEMENT_ADD la1listbox,				listbox,			$ffff,					 2,  2, -6, -4,  0,		la1listbox_data,			uidefaultflags
+		UIELEMENT_ADD la1scrollbartrack,		scrolltrack,		$ffff,					-3,  2,  2, -4,  0,		la1scrollbar_data,			uidefaultflags
+		UIELEMENT_END
 
-tabgroup1_data				.word $ffff,														0								; group bitmask
+; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ scrollbar elements
 
 fa1scrollbar_data			.word fa1scrollbar_functions, 										0, 0, 20, fa1filebox			; start position, selection index, number of entries, ptr to list
 fa1filebox_data				.word fa1scrollbar_functions,			filebox1_functions,			fa1scrollbar_data, fa1boxtxt, fa1directorytxt
+
+la1scrollbar_data			.word la1scrollbar_functions, 										0, 0, 32, la1listbox			; start position, selection index, number of entries, ptr to list
+la1listbox_data				.word la1scrollbar_functions,			listbox1_functions,			la1scrollbar_data, la1boxtxt
 
 ; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ listeners
 
@@ -40,6 +47,13 @@ fa1scrollbar_functions			.word fa1scrollbartrack,				uiscrolltrack_draw
 								.word $ffff
 
 filebox1_functions				.word fa1filebox,						userfunc_openfile
+								.word $ffff
+
+la1scrollbar_functions			.word la1scrollbartrack,				uiscrolltrack_draw
+								.word la1listbox,						uilistbox_draw
+								.word $ffff
+
+listbox1_functions				;.word la1listbox,						userfunc_openfile
 								.word $ffff
 
 ; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -75,29 +89,10 @@ userfunc_openfile
 		jsr sdc_openfile
 		jsr sdc_readsector
 
-		ldx #$00
-:		jsr sdc_getbyte
-		sta $c800,x
-		inx
-		bne :-
+		jsr jpg_process
 
-		ldx #$00
-:		jsr sdc_getbyte
-		sta $c800,x
-		inx
-		bne :-
-
-		ldx #$00
-:		jsr sdc_getbyte
-		sta $c800,x
-		inx
-		bne :-
-
-		;jsr sdc_readsector
-		;jsr sdc_readsector
 		jsr sdc_closefile
 
 		rts
 
 ; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-		

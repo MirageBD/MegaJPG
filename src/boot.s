@@ -28,7 +28,8 @@ basicend	.byte 0
 .include "ui/uimacros.s"
 
 .include "main.s"
-.include "juddpeg.s"
+.include "jpg.s"
+; .include "juddpeg.s"
 .include "irqload.s"
 
 .include "drivers/mouse.s"

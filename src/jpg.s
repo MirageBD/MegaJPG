@@ -253,3 +253,257 @@ c	; ----------------------------------------------------------------------------
 ; ---------------------------------------------------------------------------------------------------------------------------------------- END OF FILE
 
 */
+
+jpg_consolelog
+				.repeat 80
+					.byte 0
+				.endrepeat
+
+jpg_error		.byte 0
+jpg_ateof		.byte 0
+jpg_skipff		.byte 0
+
+jpg_filepos		.byte 0, 0, 0						; can probably get rid of this
+jpg_reslen		.word 0								; lame restart markers
+
+.define jpg_mult1lo		$08							; multiplication tables
+.define jpg_mult1hi		$0a
+.define jpg_mult2lo		$0c
+.define jpg_mult2hi		$0e
+
+.define jpg_negmlo		$0a00						; $0A00 DATA BLOCK!!!
+.define jpg_posmlo		$0b00						; mult tables
+.define jpg_negmhi		$0d00
+.define jpg_posmhi		$0e00						; 2 pages
+
+jpg_process
+
+		lda #00
+		sta jpg_error
+		sta jpg_ateof
+		sta jpg_skipff
+
+		lda #$ff
+		sta jpg_filepos+0
+		sta jpg_filepos+1
+		sta jpg_filepos+2
+		sta jpg_reslen+0
+		sta jpg_reslen+1
+
+		lda #>jpg_posmlo
+		sta jpg_mult1lo+1
+		lda #>jpg_negmlo
+		sta jpg_mult2lo+1
+		lda #>jpg_posmhi
+		sta jpg_mult1hi+1
+		lda #>jpg_negmhi
+		sta jpg_mult2hi+1
+
+		jsr sdc_getbyte								; check jpeg soi
+		cmp #$ff									; marker = $ffd8
+		bne jpg_err1
+		jsr sdc_getbyte
+		cmp #$d8
+		bne jpg_err1
+
+		jsr jpg_inithuff
+		jsr jpg_initbuff
+
+		jsr jpg_getapp0
+:		lda jpg_error
+		bne jpg_err1
+		jsr jpg_domarker
+;		lda jpg_ateof
+;		beq :-
+
+		rts
+
+jpg_err1
+		inc $d020
+		jmp *-3
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+.define jpg_huffmem		$1000						; huffman trees
+jpg_hufftop				.word 0						; end of huffman tree
+
+jpg_inithuff
+
+		lda #<jpg_huffmem
+		sta jpg_hufftop+0
+		lda #>jpg_huffmem
+		sta jpg_hufftop+1
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpg_imgbuf		= $8700								; image data buffer
+jpg_imgbufsize	= $3900
+
+.define jpg_point	$02
+
+jpg_initbuff
+
+		lda #<jpg_imgbuf
+		sta jpg_point
+		lda #>jpg_imgbuf
+		sta jpg_point+1
+		ldx #>jpg_imgbufsize
+		lda #$80
+		ldy #$00
+jpgibloop
+		sta (jpg_point),y
+		dey
+		bne jpgibloop
+		inc jpg_point+1
+		dex
+		bne jpgibloop
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpg_getapp0											; read jfif header
+
+		jsr jpg_getheader
+		bcs :+
+		lda jpg_header+1
+		cmp #$e0									; app0 marker
+		beq jpg_ignoresegment
+
+		jmp jpg_domarker2
+:		jmp jpg_domarker
+
+jpg_ignoresegment									; ignore rest of segment
+		jsr sdc_getbyte
+		bcs :+
+		lda jpg_ateof
+		bne :+
+		jsr jpg_declen
+		bne jpg_ignoresegment
+:		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+;
+; domarker -- read marker and call
+;   appropriate routine.
+;
+
+jpg_domarker
+		lda jpg_ateof
+		beq :+
+		rts
+
+:		jsr jpg_getheader							; find next
+		bcs jpg_domarker
+
+jpg_domarker2
+		lda jpg_header+1
+		cmp #$dd
+		beq jpg_jmpmarkerdri
+		cmp #$db
+		beq jpg_jmpmarkerdqt
+		cmp #$c4
+		beq jpg_jmpmarkerdht
+		cmp #$c0
+		beq jpg_jmpmarkersof
+		cmp #$da
+		bne jpg_markerunknown
+
+jpg_jmpmarkersos
+		jmp jpg_markersos
+jpg_jmpmarkerdri
+		jmp jpg_markerdri
+jpg_jmpmarkerdqt
+		jmp jpg_markerdqt
+jpg_jmpmarkerdht
+		jmp jpg_markerdht
+jpg_jmpmarkersof
+		jmp jpg_markersof
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpg_markerunknown
+		jsr jpg_ignoresegment
+
+jpg_markersos
+		rts
+
+jpg_markerdri
+		rts
+
+jpg_markerdqt
+		rts
+
+jpg_markerdht
+		rts
+
+jpg_markersof
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpg_declen
+		lda jpg_headerlength
+		bne :+
+		ora jpg_headerlength+1
+		beq :++
+		dec jpg_headerlength+1
+:		dec jpg_headerlength
+		lda jpg_headerlength
+		ora jpg_headerlength+1
+:		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpg_header			.word 0							; hi, lo
+jpg_headerlength	.word 0							; lo, hi
+
+; getheader -- read in header bytes.
+; on exit:
+;   c set -> error
+;   z set -> end of file
+
+jpg_getheader
+		lda #00
+		sta jpg_header+0
+		sta jpg_header+1
+
+		jsr sdc_getbyte
+		cmp #$ff
+		bne jpg_getheader_error
+
+		jsr sdc_getbyte
+		sta jpg_header+1
+		cmp #$d8									; start of jpeg
+		beq jpg_getheader_ok						; lame photoshop
+		cmp #$d9									; end of file
+		bne :+
+		sta jpg_ateof
+		beq jpg_getheader_ok
+
+:		jsr sdc_getbyte
+		bcs jpg_getheader_end
+		sta jpg_headerlength+1
+		jsr sdc_getbyte
+		bcs jpg_getheader_end
+		sec
+		sbc #2
+		sta jpg_headerlength
+		bcs :+
+		dec jpg_headerlength+1
+:		ora jpg_headerlength+1						; empty segment
+		beq jpg_getheader
+
+jpg_getheader_ok		
+		clc
+		rts
+
+jpg_getheader_error
+		sec
+		;fallthrough
+
+jpg_getheader_end
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------

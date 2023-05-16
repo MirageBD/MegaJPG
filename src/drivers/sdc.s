@@ -1,6 +1,12 @@
 ; ----------------------------------------------------------------------------------------------------
 
-.define sdc_transferbuffer $0900
+.define sdc_transferbuffer	$0900
+.define sdc_sectorbuffer	$0a00
+
+sdc_bytecounterlo	.byte 0
+sdc_bytecounterhi	.byte 0
+
+sdc_bitcounter		.byte 0
 
 ; ----------------------------------------------------------------------------------------------------
 
@@ -156,15 +162,15 @@ sdc_readsector_loop
 		lda #$81										; map the sector buffer to $de00
 		sta $d680
 
-		ldx #$00										; copy sector so $c000
+		ldx #$00										; copy sector to sectorbuffer
 :		lda $de00,x
-		sta $c000,x
+		sta sdc_sectorbuffer+$0000,x
 		inx
 		bne :-
 
 		ldx #$00
 :		lda $df00,x
-		sta $c100,x
+		sta sdc_sectorbuffer+$0100,x
 		inx
 		bne :-
 		
@@ -229,6 +235,8 @@ sdc_d81attach0_error
 
 sdc_getbyte
 
+		; LV TODO - this can be optimized a LOT
+
 		lda sdc_bytecounterhi
 		cmp #$02
 		bne :+
@@ -239,9 +247,9 @@ sdc_getbyte
 		sta sdc_bytecounterlo
 		sta sdc_bytecounterhi
 
-:		lda #<$c000
+:		lda #<sdc_sectorbuffer
 		sta sdcgb+1
-		lda #>$c000
+		lda #>sdc_sectorbuffer
 		sta sdcgb+2
 
 		clc
@@ -265,8 +273,5 @@ sdcgb	lda $babe
 		pla
 
 		rts
-
-sdc_bytecounterlo	.byte 0
-sdc_bytecounterhi	.byte 0
 
 ; ----------------------------------------------------------------------------------------------------

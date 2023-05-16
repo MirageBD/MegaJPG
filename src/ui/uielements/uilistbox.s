@@ -327,6 +327,64 @@ uilistbox_addentry
 
 		rts
 
+uilistbox_addentry_additive
+
+		; pre: put pointer to new text to add (zero terminated) in zpptrTMP2
+		; condition: don't mess with zpptrtmp
+
+		clc													; increase number of entries
+		ldy #$06
+		lda (zpptr3),y
+		adc #$01
+		sta (zpptr3),y
+		iny
+		lda (zpptr3),y
+		adc #$00
+		sta (zpptr3),y
+
+		ldy #$00											; set list pointer to text
+		lda zpptrtmp+0
+		sta (zpptr2),y
+		iny
+		lda zpptrtmp+1
+		sta (zpptr2),y
+
+		clc													; add 2 to move to next list ptr entry
+		lda zpptr2+0
+		adc #$02
+		sta zpptr2+0
+		lda zpptr2+1
+		adc #$00
+		sta zpptr2+1
+
+		ldy #$00
+		ldz #$00											; copy text from zpptrTMP2 pointer to what the listbox readss
+:		lda [zpptrtmp2],z
+		sta (zpptrtmp),y
+		beq :+
+		iny
+		inz
+		bra :-
+
+:		clc													; add length of string to start populating the next line
+		iny
+		tya
+		adc zpptrtmp+0
+		sta zpptrtmp+0
+		lda zpptrtmp+1
+		adc #$00
+		sta zpptrtmp+1
+
+
+
+		ldy #$00											; add end marker
+		lda #$ff
+		sta (zpptr2),y
+		iny
+		sta (zpptr2),y
+
+		rts
+
 uilistbox_endaddentries
 		ldy #$00
 		lda #$ff
@@ -522,88 +580,7 @@ uilistbox_drawemptyline
 uilistbox_drawlistitem
 
 		ldz #$00
-		lda uilistbox_current_draw_pos+2
-		clc
-		adc #$01
-		lsr
-		lsr
-		lsr
-		lsr
-		tax
-		lda hextodec,x
-		clc
-		adc ulb_font
-		sta [uidraw_scrptr],z
-		inz
-		inz
-
-		lda uilistbox_current_draw_pos+2
-		clc
-		adc #$01
-		and #$0f
-		tax
-		lda hextodec,x
-		clc
-		adc ulb_font
-		sta [uidraw_scrptr],z
-		inz
-		inz
-
-		lda #$20
-		adc ulb_font
-		sta [uidraw_scrptr],z
-		inz
-		inz
-
 		ldy #$00
-		lda (zpptrtmp),y
-		and #%00000001
-		bne :+									; not sample with 0 length?
-
-		lda #$3e
-		sta [uidraw_scrptr],z
-		lda #$10								; sample with 0 length = black
-		sta [uidraw_colptr],z
-		inz
-		lda #$05
-		sta [uidraw_scrptr],z
-		inz
-		bra uilistbox_drawlistitem_skipbox
-
-:		lda (zpptrtmp),y
-		and #%00000010
-		cmp #%00000010
-		bne :+									; sample that is currently playing?
-		lda #$3e
-		sta [uidraw_scrptr],z
-		lda #$43								; sample with some length + playing = nice colour
-		sta [uidraw_colptr],z
-		inz
-		lda #$05
-		sta [uidraw_scrptr],z
-		inz
-		bra uilistbox_drawlistitem_skipbox
-
-:		lda #$3e
-		sta [uidraw_scrptr],z
-		lda #$04								; sample with some length = middle gray
-		sta [uidraw_colptr],z
-		inz
-		lda #$05
-		sta [uidraw_scrptr],z
-		inz
-		bra uilistbox_drawlistitem_skipbox
-
-uilistbox_drawlistitem_skipbox
-
-		lda #$20
-		clc
-		adc ulb_font
-		sta [uidraw_scrptr],z
-		inz
-		inz
-
-		iny
 :		lda (zpptrtmp),y
 		tax
 		lda ui_textremap,x

@@ -21,16 +21,10 @@ temp2		= $f9
 count		= $f8			; used by getbits
 							; and addnode
 
-point		= $02
 dest		= $04
 
 bitslo		= $06			; and dequantize
 bitshi		= $07
-
-mult1lo		= $08            ; multiplication tables
-mult1hi		= $0a
-mult2lo		= $0c
-mult2hi		= $0e
 
 vsamp		= $28			; desample
 hsamp		= $29
@@ -46,13 +40,6 @@ qt0			= $0340			; quantization tables
 qt1			= qt0+64
 qt2			= qt1+64		; only use 3
 
-huffmem		= $0400			; huffman trees
-
-negmlo		= $0a00
-posmlo		= $0b00			; mult tables
-negmhi		= $0d00
-posmhi		= $0e00			; 2 pages
-
 crtab1		= $8400			; rgb conversion
 crtab2		= $8480
 cbtab1		= $8500
@@ -62,10 +49,6 @@ trans		= $8600			; transform
 
 veclo		= $8680			; vec to be quantized
 vechi		= $86c0
-
-imgbuf		= $8700			; image data buffer
-imgbufsize	= $3900
-;emptybuf	= $9f80
 
 ybuf		= imgbuf
 cbbuf		= imgbuf+$1300
@@ -82,43 +65,6 @@ hufferr		= 6
 		jmp idct2d
 
 start
-		lda #$76
-		sta $01
-
-		lda #00
-		sta error
-		sta ateof
-		sta skipff
-
-		lda #$ff
-		sta filepos
-		sta filepos+1
-		sta filepos+2
-		sta reslen
-		sta reslen+1
-
-		lda #>posmlo
-		sta mult1lo+1
-		lda #>negmlo
-		sta mult2lo+1
-		lda #>posmhi
-		sta mult1hi+1
-		lda #>negmhi
-		sta mult2hi+1
-
-		jsr getfile
-		bcs :rts
-
-		jsr getin			; check jpeg soi
-		cmp #$ff			; marker = $ffd8
-		bne :err1
-		jsr getin
-		cmp #$d8
-		bne :err1
-
-		jsr inithuff
-		jsr initbuff
-		jsr optscpu
 
 		jsr getapp0
 :loop	lda error
@@ -191,9 +137,6 @@ start
 		jsr $a65e
 		jmp $a474
 
-ateof	.byte 0
-error	.byte 0
-
 errtab
 		.word 0
 		.word notjpg
@@ -256,118 +199,11 @@ noscpu						; enable
 		sta $d07f
 		rts
 
-;
-; domarker -- read marker and call
-;   appropriate routine.
-;
 
-unknown
-		jsr ignore
 
-domarker
-		lda ateof
-		beq :c1
-		rts
-:c1		jsr getheader		; find next
-		bcs domarker
-do2
-		lda header+1
-;		cmp #$fe
-;		beq :com
-		cmp #$dd
-		beq :dri
-		cmp #$db
-		beq :dqt
-		cmp #$c4
-		beq :dht
-		cmp #$c0
-		beq :sof
-		cmp #$da
-		bne unknown
 
-:sos	jmp sos
-;:com   jmp comment
-:dri	jmp dri
-:dqt	jmp dqt
-:dht	jmp dht
-:sof	jmp sof
 
-;:get	jsr getheader
-;		bcc :rts
-;		lda #headerr
-;		sta error
-;:rts	rts
 
-;
-; getapp0 -- read jfif header
-;
-
-getapp0
-		jsr getheader
-		bcs :jmp
-		lda header+1
-		cmp #$e0			; app0 marker
-		beq ignore
-
-		jmp do2
-:jmp	jmp domarker
-
-; ignore rest of segment
-
-ignore
-		jsr getbyte
-		bcs :rts
-		lda ateof
-		bne :rts
-		jsr declen
-		bne ignore
-:rts	rts
-
-;
-; getheader -- read in header bytes.
-; on exit:
-;   c set -> error
-;   z set -> end of file
-;
-
-header	.word 0				; hi, lo
-length	.word 0				; lo, hi
-
-getheader
-		lda #00
-		sta header
-		sta header+1
-		jsr getbyte
-		bcs :rts
-		cmp #$ff
-		bne :sec
-
-		jsr getbyte
-		sta header+1
-		cmp #$d8			; start of jpeg
-		beq :clc			; lame photoshop
-		cmp #$d9			; end of file
-		bne :c2
-		sta ateof
-		beq :clc
-:c2
-		jsr getbyte
-		bcs :rts
-		sta length+1
-		jsr getbyte
-		bcs :rts
-		sec
-		sbc #2
-		sta length
-		bcs :c3
-		dec length+1
-:c3		ora length+1		; empty segment
-		beq getheader
-:clc	clc
-		rts
-
-:sec	sec
-:rts	rts
 
 ;
 ; getfile -- open jpeg file.
@@ -465,8 +301,6 @@ closefile
 ; getbyte
 ;
 
-skipff	.byte 0				; flag
-
 getbyte
 		inc $d020
 		jsr getin
@@ -486,8 +320,6 @@ getbyte
 		stx ateof
 		cpx #64
 		rts					; c set -> error
-
-filepos	.byte 0, 0, 0
 
 getin
 		inc filepos
@@ -560,18 +392,6 @@ hexout
 ;
 ;--------------------------------
 
-declen
-		lda length
-		bne :c1
-		ora length+1
-		beq :rts
-		dec length+1
-:c1		dec length
-		lda length
-		ora length+1
-:rts	rts
-
-
 comment
 		jsr getbyte
 		bcs :rts
@@ -595,7 +415,6 @@ comment
 
 ; lame restart markers
 
-reslen	.word 0
 cres	.word 0
 
 dri

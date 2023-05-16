@@ -155,6 +155,28 @@ entry_main
 		jsr ui_init										; initialise UI
 		jsr ui_setup
 
+		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_startaddentries
+
+		lda #<uitxt_testme								; LV TODO - setup macro/function for this
+		sta zpptrtmp2+0
+		lda #>uitxt_testme
+		sta zpptrtmp2+1
+		lda #$00
+		sta zpptrtmp2+2
+		sta zpptrtmp2+3
+		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_addentry_additive
+
+		lda #<uitxt_testme2
+		sta zpptrtmp2+0
+		lda #>uitxt_testme2
+		sta zpptrtmp2+1
+		lda #$00
+		sta zpptrtmp2+2
+		sta zpptrtmp2+3
+		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_addentry_additive
+
+		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_draw
+
 		lda #$7f										; disable CIA interrupts
 		sta $dc0d
 		sta $dd0d
