@@ -28,12 +28,12 @@ basicend	.byte 0
 .include "ui/uimacros.s"
 
 .include "main.s"
+.include "juddpeg.s"
 .include "irqload.s"
 
 .include "drivers/mouse.s"
 .include "drivers/sdc.s"
 .include "drivers/keyboard.s"
-.include "drivers/audiodma.s"
 
 .include "ui/uicore.s"
 .include "ui/uirect.s"
@@ -66,7 +66,6 @@ basicend	.byte 0
 .include "ui/uielements/uitab.s"
 .include "ui/uielements/uigroup.s"
 .include "ui/uielements/uidivider.s"
-
 
 .include "uidata.s"
 .include "uitext.s"

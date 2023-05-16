@@ -9,6 +9,7 @@
 ; ifli version: 11/22/99
 ;
 
+/*
 rendinit	= $2000
 render		= $2003
 display		= $2006
@@ -88,6 +89,7 @@ start
 		sta error
 		sta ateof
 		sta skipff
+
 		lda #$ff
 		sta filepos
 		sta filepos+1
@@ -193,13 +195,13 @@ ateof	.byte 0
 error	.byte 0
 
 errtab
-		da 00
-		da :notjpg
-		da :readerr
-		da :dqt
-		da :dht
-		da :head
-		da :huff
+		.word 0
+		.word notjpg
+		.word readerr
+		.word dqt
+		.word dht
+		.word head
+		.word huff
 
 notjpg	.byte "not a jpeg!",  0
 readerr	.byte "read error",   0
@@ -328,8 +330,8 @@ ignore
 ;   z set -> end of file
 ;
 
-header	da 00				; hi, lo
-length	da 00				; lo, hi
+header	.word 0				; hi, lo
+length	.word 0				; lo, hi
 
 getheader
 		lda #00
@@ -485,7 +487,7 @@ getbyte
 		cpx #64
 		rts					; c set -> error
 
-filepos	ds 3
+filepos	.byte 0, 0, 0
 
 getin
 		inc filepos
@@ -493,7 +495,7 @@ getin
 		inc filepos+1
 		bne :c1
 		inc filepos+2
-:c1		jmp $ffa5
+:c1		jmp $ffa5			; IECIN. Read byte from serial bus. (Must call TALK and TALKSA beforehands.)
 
 ;
 ; getbit -- get next bit!
@@ -593,8 +595,8 @@ comment
 
 ; lame restart markers
 
-reslen	da 00
-cres	da 00
+reslen	.word 0
+cres	.word 0
 
 dri
 		jsr getin
@@ -681,7 +683,7 @@ dqt
 
 ; define huffman table
 
-symbols	ds 16
+symbols	.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 hufflen	.byte 0
 
 dht
@@ -771,14 +773,14 @@ dht
 
 ; start of frame
 
-height	da 00
-width	da 00
+height	.word 0
+width	.word 0
 numrows	.byte 0
 numcols	.byte 0
 ncomps	.byte 0				; num components
-csampv	ds 6				; sampling factors
-csamph	ds 6				; (horizontal)
-cquant	ds 6				; quantization table
+csampv	.byte 0,0,0,0,0,0	; sampling factors
+csamph	.byte 0,0,0,0,0,0	; (horizontal)
+cquant	.byte 0,0,0,0,0,0	; quantization table
 
 sof
 		ldx #5
@@ -887,18 +889,18 @@ get
 
 ; and finally -- start of scan!
 
-dclo	ds 6				; dc coeffs
-dchi	ds 6
+dclo	.byte 0,0,0,0,0,0	; dc coeffs
+dchi	.byte 0,0,0,0,0,0
 
 row		.byte 0
 col		.byte 0
 rowoff	.byte 0				; row offset
 coloff	.byte 0				; col offset
-buffpt	da 00				; image buffer
+buffpt	.word 0				; image buffer
 comp	.byte 0				; current component
 
-achuff	ds 6				; ac table to use
-dchuff	ds 6				; dc table to use
+achuff	.byte 0,0,0,0,0,0	; ac table to use
+dchuff	.byte 0,0,0,0,0,0	; dc table to use
 
 sos
 		dec skipff			; skip $ff bytes
@@ -1030,10 +1032,10 @@ readdone
 
 ; buffer size = 38*8 = $0130 * 8 lines
 
-linelen		da $0130
-buflen		da $0980
+linelen		.word $0130
+buflen		.word $0980
 
-curbuf		da 00
+curbuf		.word 0
 curcomp		.byte 0
 rend		.byte 0
 currow		.byte 0
@@ -1238,9 +1240,9 @@ decodeac
 ; result -> trans
 ;
 quanttab
-		da qt0
-		da qt1
-		da qt2
+		.word qt0
+		.word qt1
+		.word qt2
 
 ; table to un-zigzag coeffs
 ; multiples of 2, since 2 byte result.
@@ -1313,7 +1315,7 @@ dequantize
 ; on entry: dest = destination buffer
 ;
 
-;curpos		da  00			; buffer position
+;curpos		.word 0			; buffer position
 ;bufcol		.byte 0			; buffer column
 
 desample 
@@ -1539,16 +1541,16 @@ getbits
 ; link+2 = hufftop -> no left link.
 ;
 
-dchuff0		da 00				; addresses
-dchuff1		da 00
-dchuff2		da 00
-dchuff3		da 00
-achuff0		da 00
-achuff1		da 00
-achuff2		da 00
-achuff3		da 00
+dchuff0		.word 00				; addresses
+dchuff1		.word 00
+dchuff2		.word 00
+dchuff3		.word 00
+achuff0		.word 00
+achuff1		.word 00
+achuff2		.word 00
+achuff3		.word 00
 
-hufftop		da 00				; end of huffman tree
+hufftop		.word 00				; end of huffman tree
 ty			.byte 0
 tx			.byte 0
 
@@ -1607,7 +1609,7 @@ newnode
 ; add a new node; .x = length
 ; (huff) -> tree root
 
-huffbits	da 00				; hi,lo
+huffbits	.word 0				; hi,lo
 huffval		.byte 0
 
 addnode
@@ -1752,7 +1754,7 @@ a3216	= a1216
 a4216	= 20091			; ...
 a5216	= 25080
 
-;coeff		ds  16
+;coeff		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 coeff	= $02a7
 
 idct2d
@@ -1853,10 +1855,10 @@ rows
 
 		rts
 
-;index		da  00
+;index		.word 0
 
-;dct		ds  16
-;coeff		ds  16
+;dct		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+;coeff		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 f0		= dct
 f1		= dct+2
@@ -1876,9 +1878,9 @@ c5		= coeff+10
 c6		= coeff+12
 c7		= coeff+14
 
-;t1		da  0
-;t2		da  0
-;t3		da  0
+;t1		.word 0
+;t2		.word 0
+;t3		.word 0
 
 ;
 ; compute the inverse dct (1d)
@@ -2507,3 +2509,5 @@ pmult						; exit .a = bitshi
 		lda #00
 		sbc bitshi
 		rts
+
+*/

@@ -71,7 +71,31 @@ userfunc_openfile
 		jsr uifilebox_draw
 		rts
 
-:		jsr sdc_openfile
+:
+		jsr sdc_openfile
+		jsr sdc_readsector
+
+		ldx #$00
+:		jsr sdc_getbyte
+		sta $c800,x
+		inx
+		bne :-
+
+		ldx #$00
+:		jsr sdc_getbyte
+		sta $c800,x
+		inx
+		bne :-
+
+		ldx #$00
+:		jsr sdc_getbyte
+		sta $c800,x
+		inx
+		bne :-
+
+		;jsr sdc_readsector
+		;jsr sdc_readsector
+		jsr sdc_closefile
 
 		rts
 
