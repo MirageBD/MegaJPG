@@ -1,4 +1,4 @@
-
+; ----------------------------------------------------------------------------------------------------
 
 .define screen					$e000	; size = 80*50*2 = $1f40
 
@@ -139,6 +139,7 @@ entry_main
 		FLOPPY_FAST_LOAD sprites,			$30, $33
 		FLOPPY_FAST_LOAD kbsprites,			$30, $34
 		FLOPPY_FAST_LOAD spritepal,			$30, $35
+		FLOPPY_FAST_LOAD $0a00,				$30, $36		; jpg_negmlo
 		jsr fl_exit
 
 		sei

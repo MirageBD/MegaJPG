@@ -131,6 +131,7 @@ $(EXE_DIR)/disk.d81: $(EXE_DIR)/boot.prg $(BIN_DIR)/font_chars1.bin $(BIN_DIR)/g
 	 -f "03" -w $(BIN_DIR)/cursor_sprites1.bin \
 	 -f "04" -w $(BIN_DIR)/kbcursor_sprites1.bin \
 	 -f "05" -w $(BIN_DIR)/cursor_pal1.bin \
+	 -f "06" -w $(BIN_DIR)/data0a00.bin \
 	$@
 
 # -----------------------------------------------------------------------------

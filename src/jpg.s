@@ -265,9 +265,56 @@ jpg_skipff				.byte 0
 jpg_filepos				.byte 0, 0, 0				; can probably get rid of this
 jpg_reslen				.word 0						; lame restart markers
 
-.define jpg_ybuf		jpg_imgbuf
-.define jpg_cbbuf		jpg_imgbuf+$1300
-.define jpg_crbuf		jpg_imgbuf+$2600
+.define jpg_negmlo		$0a00						; $0A00-$1000 DATA BLOCK!!!
+.define jpg_posmlo		$0b00						; mult tables
+.define jpg_negmhi		$0d00
+.define jpg_posmhi		$0e00						; 2 pages
+
+.define jpg_a1216		46341						; a1 * 2^16
+.define jpg_a2216		35468						; a2 * 2^16
+.define jpg_a3216		jpg_a1216
+.define jpg_a4216		20091						; ...
+.define jpg_a5216		25080
+
+.define jpg_a1lo		$2900						; cos(2a), a=pi/8
+.define jpg_a1hi		$2a00
+.define jpg_a2lo		$2b00						; cos(a) - cos(3a)
+.define jpg_a2hi		$2c00
+.define jpg_a3lo		jpg_a1lo					; cos(2a)
+.define jpg_a3hi		jpg_a1hi
+.define jpg_a4lo		$2d00						; cos(a) + cos(3a)
+.define jpg_a4hi		$2e00
+.define jpg_a4gh		$2f00
+.define jpg_a5lo		$3000						; cos(3a)
+.define jpg_a5hi		$3100
+
+.define jpg_sec1		$3200
+.define jpg_sec2		$3400
+.define jpg_sec3		$3600
+.define jpg_sec4		$3800
+.define jpg_sec5		$3a00
+.define jpg_sec6		$3c00
+.define jpg_sec7		$3e00
+
+
+.define jpg_crtab1		$8400						; rgb conversion
+.define jpg_crtab2		$8480
+.define jpg_cbtab1		$8500
+.define jpg_cbtab2		$8580
+
+.define jpg_trans		$8600						; transform
+
+.define jpg_veclo		$8680						; vec to be quantized
+.define jpg_vechi		$86c0
+
+.define jpg_imgbuf		$8700						; image data buffer $8700-$c000
+.define jpg_imgbufsize	$3900
+
+.define jpg_ybuf		jpg_imgbuf+$0000			; $8700
+.define jpg_cbbuf		jpg_imgbuf+$1300			; $9a00
+.define jpg_crbuf		jpg_imgbuf+$2600			; $ad00
+
+.define jpg_point		$02
 
 .define jpg_dest		$04
 
@@ -315,20 +362,6 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_quantp		$fc							; quant table
 .define jpg_temp		$fe
 
-.define jpg_negmlo		$0a00						; $0A00 DATA BLOCK!!!
-.define jpg_posmlo		$0b00						; mult tables
-.define jpg_negmhi		$0d00
-.define jpg_posmhi		$0e00						; 2 pages
-
-.define jpg_crtab1		$8400						; rgb conversion
-.define jpg_crtab2		$8480
-.define jpg_cbtab1		$8500
-.define jpg_cbtab2		$8580
-
-.define jpg_trans		$8600						; transform
-
-.define jpg_veclo		$8680						; vec to be quantized
-.define jpg_vechi		$86c0
 
 .define jpg_notjpg		1							; errors
 .define jpg_readerr		2
@@ -338,8 +371,8 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_hufferr		6
 
 .define jpg_qt0			$0340						; quantization tables
-.define jpg_qt1			jpg_qt0+64
-.define jpg_qt2			jpg_qt1+64					; only use 3
+.define jpg_qt1			jpg_qt0+64					; $0380
+.define jpg_qt2			jpg_qt1+64					; $03c0 - only use 3
 
 jpg_process
 
@@ -394,11 +427,6 @@ jpg_err1
 		jmp *-3
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
-
-jpg_imgbuf		= $8700								; image data buffer
-jpg_imgbufsize	= $3900
-
-.define jpg_point	$02
 
 jpg_initbuff
 
@@ -485,8 +513,141 @@ jpg_jmpmarker_sof
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
+jpg_row		.byte 0
+jpg_rowoff	.byte 0				; row offset
+
 jpg_marker_sos
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_sos
+
+		dec jpg_skipff								; skip $ff bytes
+		
+		; -------------------------------
+		;jsr rendinit
+		; -------------------------------
+
+		jsr sdc_getbyte
+
+		sta jpg_temp								; # of components
+		sta jpg_ncomps
+
+:		jsr sdc_getbyte
+		sta jpg_temp+1								; component id    01 00     02 11     03 11
+
+		jsr sdc_getbyte
+		ldx jpg_temp+1
+
+		pha
+		and #$0f
+		sta jpg_achuff,x
+		pla
+		lsr
+		lsr
+		lsr
+		lsr
+		sta jpg_dchuff,x
+		dec jpg_temp
+		bne :-
+		jsr sdc_getbyte								; scan parameters		00
+		jsr sdc_getbyte								; (progressive)			3F
+		jsr sdc_getbyte								; (ignore)				00
+
+; image data begins here							$02BB in pup.jpg file
+
+		lda #00
+		sta jpg_row
+		sta jpg_col
+		jsr restart
+
+jpg_sos_ready
+		ldx #1										; luma/intensity
+		lda #<jpg_ybuf
+		ldy #>jpg_ybuf
+		jsr jpg_readdataunit
+
+		ldx jpg_ncomps
+		dex
+		beq jpg_sos_readdone
+		ldx #2										; read chroma
+		lda #<jpg_cbbuf
+		ldy #>jpg_cbbuf
+		jsr jpg_readdataunit
+
+		ldx jpg_ncomps
+		dex
+		beq jpg_sos_readdone
+		ldx #3										; read chroma
+		lda #<jpg_crbuf
+		ldy #>jpg_crbuf
+		jsr jpg_readdataunit
+
+jpg_sos_readdone
+		jsr decres
+
+		lda jpg_eof
+		bne jpg_sos_done
+		lda jpg_csamph								; max sample
+		clc
+		adc jpg_col
+		sta jpg_col
+		cmp jpg_numcols
+		bcc jpg_sos_ready
+
+		; ------------------ ONE ROW DONE!!!
+		; ybuf now contains luma values - check if it looks ok!!!
+		inc $d020
+		jmp *-3
+		; ------------------ ONE ROW DONE!!!
+
+		jsr jpg_torgb
+
+
+
+
+		lda #00
+		sta jpg_col
+
+		lda #<jpg_imgbuf
+		ldy #>jpg_imgbuf
+		ldx jpg_csampv
+		stx jpg_temp2
+
+jpg_sos_rend
+		sta jpg_temp+0
+		sty jpg_temp+1
+
+		ldx jpg_row
+		cpx jpg_rowoff
+		bcc jpg_sos_norend
+
+		; -----------------------------
+		;jsr render			; unto ceaser
+		; -----------------------------
+
+jpg_sos_norend
+		inc jpg_row
+		lda jpg_row
+		cmp jpg_numrows
+		bcs jpg_sos_done
+		sec
+		sbc jpg_rowoff
+		bcc :+
+		cmp #25
+		bcs jpg_sos_done
+
+:		lda jpg_temp			; next buffer
+		clc
+		adc jpg_buflen+0
+		sta jpg_temp+0
+		lda jpg_temp+1
+		adc jpg_buflen+1
+		tay
+		lda jpg_temp
+		dec jpg_temp2
+		bne jpg_sos_rend
+
+		jmp jpg_sos_ready
+
+jpg_sos_done
 		inc jpg_eof
 		rts
 
@@ -691,9 +852,9 @@ jpg_width	.word 0
 jpg_numrows	.byte 0
 jpg_numcols	.byte 0
 jpg_ncomps	.byte 0									; num components
-jpg_csampv	.byte 0,0,0,0,0,0						; sampling factors
-jpg_csamph	.byte 0,0,0,0,0,0						; (horizontal)
-jpg_cquant	.byte 0,0,0,0,0,0						; quantization table
+jpg_csampv	.byte 0, 0, 0, 0, 0, 0					; sampling factors
+jpg_csamph	.byte 0, 0, 0, 0, 0, 0					; (horizontal)
+jpg_cquant	.byte 0, 0, 0, 0, 0, 0					; quantization table
 
 jpg_marker_sof
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_sof
@@ -706,19 +867,19 @@ jpg_marker_sof_start
 		dex
 		bpl :-
 
-		jsr sof_get
+		jsr sof_get									; get bit depth - should be 8
 		cmp #8
 		beq sof_ok
 		lda #jpg_badqt
 		sta jpg_error
 		rts
 
-sof_ok	jsr sof_get
+sof_ok	jsr sof_get									; get height - $00e8
 		sta jpg_height+1
 		jsr sof_get
-		sta jpg_height
+		sta jpg_height+0
 		sec
-		sbc #1
+		sbc #1										; 0..7 instead of 1..8
 		sta jpg_numrows
 		lda jpg_height+1
 		sbc #00
@@ -730,10 +891,10 @@ sof_ok	jsr sof_get
 		ror jpg_numrows
 		inc jpg_numrows
 
-		jsr sof_get
+		jsr sof_get									; get width - 40122
 		sta jpg_width+1
 		jsr sof_get
-		sta jpg_width
+		sta jpg_width+0
 		sec
 		sbc #1										; 0..7 instead of 1..8
 		sta jpg_numcols
@@ -747,13 +908,18 @@ sof_ok	jsr sof_get
 		ror jpg_numcols
 		inc jpg_numcols								; 0..7 => 1 col, etc.
 
-		jsr sof_get
+		jsr sof_get									; get components - 3
 		sta jpg_ncomps
 		sta jpg_temp+0
-sof_loop		
-		jsr sof_get
-		sta jpg_temp+1								; id
-		jsr sof_get
+sof_loop
+
+		; 01 22 00 Y
+		; 02 11 01 Cb
+		; 03 11 01 Cr
+
+		jsr sof_get									; read component ID
+		sta jpg_temp+1								;
+		jsr sof_get									; read 22, 11, 11
 		ldx jpg_temp+1
 		pha
 		and #$0f
@@ -764,11 +930,15 @@ sof_loop
 		lsr
 		lsr
 		sta jpg_csamph,x
-		jsr sof_get
+		jsr sof_get									; read 0 (Y) or 1 (Cb, Cr)
 		ldx jpg_temp+1
 		sta jpg_cquant,x
 		dec jpg_temp
 		bne sof_loop
+
+		; csampv = 0 2 1 1 0 0
+		; csamph = 0 2 1 1 0 0
+		; cquant = 0 0 1 1 0 0
 
 		ldx #5										; find max sample
 		lda #00
@@ -776,17 +946,22 @@ sof_loop
 		bcs :+
 		lda jpg_csamph,x
 :		dex
-		bne :-
+		bne :--
 		sta jpg_csamph								; store in +0
 
-		ldx #5
+		; csamph = 2 2 1 1 0 0
+
+		ldx #5										; find max sample
 		lda #00
 :		cmp jpg_csampv,x
 		bcs :+
 		lda jpg_csampv,x
 :		dex
-		bne :-
-		sta jpg_csampv
+		bne :--
+		sta jpg_csampv								; store in +0
+
+		; csampv = 2 2 1 1 0 0
+
 		rts
 
 ; ----------------------------------
@@ -1228,14 +1403,6 @@ jpg_getbits_zero
 ;
 ; these multipliers can in part be incorporated in the quantization table, but for now they're out in the open.
 
-.define jpg_sec1	$3200
-.define jpg_sec2	$3400
-.define jpg_sec3	$3600
-.define jpg_sec4	$3800
-.define jpg_sec5	$3a00
-.define jpg_sec6	$3c00
-.define jpg_sec7	$3e00
-
 jpg_prepdat
 		ldx #00
 		lda #<jpg_sec4
@@ -1423,24 +1590,6 @@ jpg_pmult_neg
 ;
 ; input: dct coeffs contained in flo/fhi
 ; output: original coeffs in coeffs
-
-.define jpg_a1216	46341							; a1 * 2^16
-.define jpg_a2216	35468							; a2 * 2^16
-.define jpg_a3216	jpg_a1216
-.define jpg_a4216	20091							; ...
-.define jpg_a5216	25080
-
-.define jpg_a1lo	$2900							; cos(2a), a=pi/8
-.define jpg_a1hi	$2a00
-.define jpg_a2lo	$2b00							; cos(a) - cos(3a)
-.define jpg_a2hi	$2c00
-.define jpg_a3lo	jpg_a1lo						; cos(2a)
-.define jpg_a3hi	jpg_a1hi
-.define jpg_a4lo	$2d00							; cos(a) + cos(3a)
-.define jpg_a4hi	$2e00
-.define jpg_a4gh	$2f00
-.define jpg_a5lo	$3000							; cos(3a)
-.define jpg_a5hi	$3100
 
 jpg_idct
 		jsr jpg_prepdat								; shift and such
@@ -1958,7 +2107,7 @@ ji2drloop
 		beq ji2drcont
 		bpl ji2drpos
 		lda #00
-		.byte $2c
+		.byte $2c									; BIT $xxxx
 ji2drpos
 		lda #$ff
 		; sta (dest),y
@@ -2073,9 +2222,9 @@ jpg_torgb_cont
 		beq :++
 		bpl :+
 		lda #00
-		.byte $2c
+		.byte $2c									; BIT $xxxx
 :		lda #255
-		.byte $2c
+		.byte $2c									; BIT $xxxx
 :		lda jpg_temp
 		sta (jpg_cbpoint),y							; green
 		lda (jpg_ypoint),y
@@ -2096,9 +2245,9 @@ jpg_torgb_poscr
 		beq :++
 		bpl :+
 		lda #00
-		.byte $2c
+		.byte $2c									; BIT $xxxx
 :		lda #255
-		.byte $2c
+		.byte $2c									; BIT $xxxx
 :		lda jpg_temp
 		sta (jpg_cbpoint),y
 		lda (jpg_ypoint),y
@@ -2287,5 +2436,81 @@ jpg_fetch											; fetch the data
 		jmp jpg_desample
 
 :		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+; buffer size = 38*8 = $0130 * 8 lines
+
+jpg_buflen		.word $0980
+
+jpg_col			.byte 0
+jpg_coloff		.byte 0								; col offset
+
+jpg_readdataunit
+		sta jpg_curbuf+0
+		sty jpg_curbuf+1
+		stx jpg_curcomp
+		lda #00
+		sta jpg_rend
+
+		ldy #00										; compute expansion factors
+		tya											; maxsamp/samp
+		clc
+:		iny
+		adc jpg_csamph,x
+		cmp jpg_csamph								; max
+		bcc :-
+		sty jpg_hsamp
+		lda #00
+		tay
+		clc
+:		iny
+		adc jpg_csampv,x
+		cmp jpg_csampv
+		bcc :-
+		sty jpg_vsamp
+
+		lda jpg_csampv,x							; vert samp
+		sta jpg_temp
+
+jpg_readdataunit_loopy
+		ldx jpg_curcomp
+		lda jpg_csamph,x							; horiz sampling
+		sta jpg_temp+1
+		lda jpg_col
+		sec
+		sbc jpg_coloff
+		sta jpg_curcol
+
+jpg_readdataunit_loopx
+		lda jpg_rend
+		sta jpg_rendflag
+		jsr jpg_fetch
+		lda jpg_error
+		bne jpg_readdataunit_end
+		lda jpg_curcol
+		clc
+		adc jpg_hsamp
+		sta jpg_curcol
+		dec jpg_temp+1
+		bne jpg_readdataunit_loopx
+
+		ldx jpg_vsamp
+jpg_readdataunit_nextrow
+		lda jpg_curbuf
+		clc
+		adc jpg_buflen+0
+		sta jpg_curbuf
+		lda jpg_curbuf+1
+		adc jpg_buflen+1
+		sta jpg_curbuf+1
+		dex
+		bne jpg_readdataunit_nextrow
+
+		dec jpg_temp
+		bne jpg_readdataunit_loopy
+
+jpg_readdataunit_end		
+		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
