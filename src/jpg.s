@@ -273,8 +273,11 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_mult2lo		$0c
 .define jpg_mult2hi		$0e
 
-.define jpg_dct			$10
+.define jpg_t1			$22
+.define jpg_t2			$24
+.define jpg_t3			$26
 
+.define jpg_dct			$10
 .define jpg_f0			jpg_dct+0
 .define jpg_f1			jpg_dct+2
 .define jpg_f2			jpg_dct+4
@@ -283,6 +286,17 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_f5			jpg_dct+10
 .define jpg_f6			jpg_dct+12
 .define jpg_f7			jpg_dct+14
+
+.define jpg_coeff		$02a7
+.define jpg_c0			jpg_coeff+0
+.define jpg_c1			jpg_coeff+2
+.define jpg_c2			jpg_coeff+4
+.define jpg_c3			jpg_coeff+6
+.define jpg_c4			jpg_coeff+8
+.define jpg_c5			jpg_coeff+10
+.define jpg_c6			jpg_coeff+12
+.define jpg_c7			jpg_coeff+14
+
 
 .define jpg_count		$f8							; used by getbits, addnode amd decodeac
 .define jpg_temp2		$f9							; used for huffman nodes
@@ -1381,6 +1395,465 @@ jpg_pmult_neg
 		sta jpg_bitslo
 		lda #00
 		sbc jpg_bitshi
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+; compute the inverse dct (1d)
+; uses modified reversed flowgraph from pennebaker & mitchell, p. 52
+;
+; input: dct coeffs contained in flo/fhi
+; output: original coeffs in coeffs
+
+.define jpg_a1216	46341							; a1 * 2^16
+.define jpg_a2216	35468							; a2 * 2^16
+.define jpg_a3216	jpg_a1216
+.define jpg_a4216	20091							; ...
+.define jpg_a5216	25080
+
+.define jpg_a1lo	$2900							; cos(2a), a=pi/8
+.define jpg_a1hi	$2a00
+.define jpg_a2lo	$2b00							; cos(a) - cos(3a)
+.define jpg_a2hi	$2c00
+.define jpg_a3lo	jpg_a1lo						; cos(2a)
+.define jpg_a3hi	jpg_a1hi
+.define jpg_a4lo	$2d00							; cos(a) + cos(3a)
+.define jpg_a4hi	$2e00
+.define jpg_a4gh	$2f00
+.define jpg_a5lo	$3000							; cos(3a)
+.define jpg_a5hi	$3100
+
+jpg_idct
+		jsr jpg_prepdat								; shift and such
+
+; stage 1: f(5) <- f(5) - f(3)
+;          f(1) <- f(1) + f(7)
+;          f(7) <- f(1) - f(7)
+;          f(3) <- f(5) + f(3)
+
+		lda jpg_f5
+		sec
+		sbc jpg_f3
+		sta jpg_t1
+		lda jpg_f5+1
+		sbc jpg_f3+1
+		sta jpg_t1+1
+
+		lda jpg_f1
+		clc
+		adc jpg_f7
+		sta jpg_t2
+		lda jpg_f1+1
+		adc jpg_f7+1
+		sta jpg_t2+1
+
+		lda jpg_f1
+		sec
+		sbc jpg_f7
+		sta jpg_t3
+		lda jpg_f1+1
+		sbc jpg_f7+1
+		sta jpg_t3+1
+
+		lda jpg_f5
+		clc
+		adc jpg_f3
+		sta jpg_f3
+		lda jpg_f5+1
+		adc jpg_f3+1
+		sta jpg_f3+1
+
+		lda jpg_t3
+		sta jpg_f7
+		lda jpg_t3+1
+		sta jpg_f7+1
+
+		lda jpg_t2
+		sta jpg_f1
+		lda jpg_t2+1
+		sta jpg_f1+1
+
+		lda jpg_t1
+		sta jpg_f5
+		lda jpg_t1+1
+		sta jpg_f5+1
+
+; stage 2: f(2) <- f(2) - f(6)
+;          f(6) <- f(2) + f(6)
+;          f(1) <- f(1) - f(3)
+;          f(3) <- f(1) + f(3)
+
+		lda jpg_f2
+		sec
+		sbc jpg_f6
+		sta jpg_t1
+		lda jpg_f2+1
+		sbc jpg_f6+1
+		sta jpg_t1+1
+
+		lda jpg_f2
+		clc
+		adc jpg_f6
+		sta jpg_f6
+		lda jpg_f2+1
+		adc jpg_f6+1
+		sta jpg_f6+1
+
+		lda jpg_t1
+		sta jpg_f2
+		lda jpg_t1+1
+		sta jpg_f2+1
+
+		lda jpg_f1
+		sec
+		sbc jpg_f3
+		sta jpg_t1
+		lda jpg_f1+1
+		sbc jpg_f3+1
+		sta jpg_t1+1
+
+		lda jpg_f1
+		clc
+		adc jpg_f3
+		sta jpg_f3
+		lda jpg_f1+1
+		adc jpg_f3+1
+		sta jpg_f3+1
+
+		lda jpg_t1
+		sta jpg_f1
+		lda jpg_t1+1
+		sta jpg_f1+1
+
+; stage 3: f(2) <- a1*f(2)
+;          f(5) <- -a2*f(5) + t1
+;          f(1) <- a3*f(1)
+;          f(7) <- a4*f(7) + t1
+; where t1 = -a5*(f(5) + f(7))
+
+; f(2) <- a1*f(2)
+
+		ldx jpg_f2        	   ; lo
+		ldy jpg_f2+1      	   ; hi
+		lda jpg_a1lo,y
+		clc
+		adc jpg_a1hi,x
+		sta jpg_bitslo    	   ; lo byte
+		lda jpg_a1hi,y
+		adc #00
+		cpy #$80
+		bcc :+
+		sta jpg_bitshi
+		lda jpg_bitslo
+		sbc #<jpg_a1216
+		sta jpg_bitslo
+		lda jpg_bitshi
+		sbc #>jpg_a1216
+:		sta jpg_f2+1
+		lda jpg_bitslo
+		sta jpg_f2
+
+; f(1) = a3*f(1)
+
+		ldx jpg_f1       	    ; lo
+		ldy jpg_f1+1     	    ; hi
+		lda jpg_a3lo,y
+		clc
+		adc jpg_a3hi,x
+		sta jpg_bitslo
+		lda jpg_a3hi,y
+		adc #00
+		cpy #$80
+		bcc :+
+		sta jpg_bitshi
+		lda jpg_bitslo
+		sbc #<jpg_a3216
+		sta jpg_bitslo
+		lda jpg_bitshi
+		sbc #>jpg_a3216
+:		sta jpg_f1+1
+		lda jpg_bitslo
+		sta jpg_f1
+
+; t1 = -a5*(f(5) + f(7))
+
+		lda jpg_f5
+		clc
+		adc jpg_f7
+		tax					; lo
+		lda jpg_f5+1
+		adc jpg_f7+1
+		tay					; hi
+		lda jpg_a5lo,y
+		clc
+		adc jpg_a5hi,x
+		sta jpg_bitslo
+		lda jpg_a5hi,y
+		adc #00
+		sta jpg_bitshi
+		cpy #$80
+		bcc :+
+		lda jpg_bitslo
+		sbc #<jpg_a5216
+		sta jpg_bitslo
+		lda jpg_bitshi
+		sbc #>jpg_a5216
+		sta jpg_bitshi
+:		lda jpg_bitslo
+		eor #$ff
+		clc
+		adc #01
+		sta jpg_t1
+		lda jpg_bitshi
+		eor #$ff
+		adc #00
+		sta jpg_t1+1
+
+; f(5) = t1 - a2*f(5)
+
+		ldx jpg_f5				; lo
+		ldy jpg_f5+1			; hi
+		lda jpg_a2lo,y
+		clc
+		adc jpg_a2hi,x
+		sta jpg_bitslo
+		lda jpg_a2hi,y
+		adc #00
+		cpy #$80
+		bcc :+
+		sta jpg_bitshi
+		lda jpg_bitslo
+		sbc #<jpg_a2216
+		sta jpg_bitslo
+		lda jpg_bitshi
+		sbc #>jpg_a2216
+:		sta jpg_bitshi
+		lda jpg_t1
+		sec
+		sbc jpg_bitslo
+		sta jpg_f5
+		lda jpg_t1+1
+		sbc jpg_bitshi
+		sta jpg_f5+1
+
+; f(7) = a4*f(7) + t1
+
+		ldx jpg_f7				; lo
+		ldy jpg_f7+1			; hi
+		lda jpg_a4lo,y
+		clc
+		adc jpg_a4hi,x
+		sta jpg_bitslo
+		lda jpg_a4hi,y
+		adc jpg_a4gh,x			; a4*.x can be >255
+		cpy #$80
+		bcc :+
+		sta jpg_bitshi
+		lda jpg_bitslo
+		sbc #<jpg_a4216
+		sta jpg_bitslo
+		lda jpg_bitshi
+		sbc #>jpg_a4216
+:		sta jpg_bitshi
+		lda jpg_bitslo
+		clc
+		adc jpg_t1
+		sta jpg_f7
+		lda jpg_bitshi
+		adc jpg_t1+1
+		sta jpg_f7+1
+
+; stage 4:
+;   f(0) <- f(0) + f(4)
+;   f(4) <- f(0) - f(4)
+;   f(6) <- f(2) + f(6)
+
+		lda jpg_f0
+		clc
+		adc jpg_f4
+		sta jpg_t1
+		lda jpg_f0+1
+		adc jpg_f4+1
+		sta jpg_t1+1
+
+		lda jpg_f0
+		sec
+		sbc jpg_f4
+		sta jpg_f4
+		lda jpg_f0+1
+		sbc jpg_f4+1
+		sta jpg_f4+1
+
+		lda jpg_t1
+		sta jpg_f0
+		lda jpg_t1+1
+		sta jpg_f0+1
+
+		lda jpg_f2
+		clc
+		adc jpg_f6
+		sta jpg_f6
+		lda jpg_f2+1
+		adc jpg_f6+1
+		sta jpg_f6+1
+
+; stage 5:
+;   f(0) <- f(0) + f(6)
+;   f(4) <- f(2) + f(4)
+;   f(2) <- f(4) - f(2)
+;   f(6) <- f(0) - f(6)
+;   f(3) <- f(3) + f(7)
+;   f(7) <- f(7) + f(1)
+;   f(1) <- f(1) - f(5)
+;   f(5) <- -f(5)
+
+		lda jpg_f0
+		clc
+		adc jpg_f6
+		sta jpg_t1
+		lda jpg_f0+1
+		adc jpg_f6+1
+		sta jpg_t1+1
+
+		lda jpg_f0
+		sec
+		sbc jpg_f6
+		sta jpg_f6
+		lda jpg_f0+1
+		sbc jpg_f6+1
+		sta jpg_f6+1
+		lda jpg_t1
+		sta jpg_f0
+		lda jpg_t1+1
+		sta jpg_f0+1
+
+		lda jpg_f4
+		clc
+		adc jpg_f2
+		sta jpg_t1
+		lda jpg_f4+1
+		adc jpg_f2+1
+		sta jpg_t1+1
+
+		lda jpg_f4
+		sec
+		sbc jpg_f2
+		sta jpg_f2
+		lda jpg_f4+1
+		sbc jpg_f2+1
+		sta jpg_f2+1
+		lda jpg_t1
+		sta jpg_f4
+		lda jpg_t1+1
+		sta jpg_f4+1
+
+		lda jpg_f3
+		clc
+		adc jpg_f7
+		sta jpg_f3
+		lda jpg_f3+1
+		adc jpg_f7+1
+		sta jpg_f3+1
+
+		lda jpg_f7
+		clc
+		adc jpg_f1
+		sta jpg_f7
+		lda jpg_f7+1
+		adc jpg_f1+1
+		sta jpg_f7+1
+
+		lda jpg_f1
+		sec
+		sbc jpg_f5
+		sta jpg_f1
+		lda jpg_f1+1
+		sbc jpg_f5+1
+		sta jpg_f1+1
+
+		lda #00
+		sec
+		sbc jpg_f5
+		sta jpg_f5
+		lda #00
+		sbc jpg_f5+1
+		sta jpg_f5+1
+
+; final stage:
+;   c(0) = f(0) + f(3)
+;   c(1) = f(4) + f(7)
+;   c(2) = f(2) + f(1)
+;   c(3) = f(6) + f(5)
+;   c(4) = f(6) - f(5)
+;   c(5) = f(2) - f(1)
+;   c(6) = f(4) - f(7)
+;   c(7) = f(0) - f(3)
+;
+; note: values are offset -128
+
+		lda jpg_f0
+		clc
+		adc jpg_f3
+		sta jpg_c0
+		lda jpg_f0+1
+		adc jpg_f3+1
+		sta jpg_c0+1
+
+		lda jpg_f4
+		clc
+		adc jpg_f7
+		sta jpg_c1
+		lda jpg_f4+1
+		adc jpg_f7+1
+		sta jpg_c1+1
+
+		lda jpg_f2
+		clc
+		adc jpg_f1
+		sta jpg_c2
+		lda jpg_f2+1
+		adc jpg_f1+1
+		sta jpg_c2+1
+
+		lda jpg_f6
+		clc
+		adc jpg_f5
+		sta jpg_c3
+		lda jpg_f6+1
+		adc jpg_f5+1
+		sta jpg_c3+1
+
+		lda jpg_f6
+		sec
+		sbc jpg_f5
+		sta jpg_c4
+		lda jpg_f6+1
+		sbc jpg_f5+1
+		sta jpg_c4+1
+
+		lda jpg_f2
+		sec
+		sbc jpg_f1
+		sta jpg_c5
+		lda jpg_f2+1
+		sbc jpg_f1+1
+		sta jpg_c5+1
+
+		lda jpg_f4
+		sec
+		sbc jpg_f7
+		sta jpg_c6
+		lda jpg_f4+1
+		sbc jpg_f7+1
+		sta jpg_c6+1
+
+		lda jpg_f0
+		sec
+		sbc jpg_f3
+		sta jpg_c7
+		lda jpg_f0+1
+		sbc jpg_f3+1
+		sta jpg_c7+1
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
