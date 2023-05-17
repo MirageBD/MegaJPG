@@ -74,7 +74,7 @@ $(EXE_DIR)/boot.o:	$(SRC_DIR)/boot.s \
 					$(SRC_DIR)/macros.s \
 					$(SRC_DIR)/mathmacros.s \
 					$(SRC_DIR)/jpg.s \
-					$(SRC_DIR)/juddpeg.s \
+					$(SRC_DIR)/jpgrender.s \
 					$(SRC_DIR)/uidata.s \
 					$(SRC_DIR)/uitext.s \
 					$(DRVRS_SRC_DIR)/mouse.s \
@@ -132,6 +132,7 @@ $(EXE_DIR)/disk.d81: $(EXE_DIR)/boot.prg $(BIN_DIR)/font_chars1.bin $(BIN_DIR)/g
 	 -f "04" -w $(BIN_DIR)/kbcursor_sprites1.bin \
 	 -f "05" -w $(BIN_DIR)/cursor_pal1.bin \
 	 -f "06" -w $(BIN_DIR)/data0a00.bin \
+	 -f "07" -w $(BIN_DIR)/data4000.bin \
 	$@
 
 # -----------------------------------------------------------------------------

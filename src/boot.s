@@ -29,7 +29,7 @@ basicend	.byte 0
 
 .include "main.s"
 .include "jpg.s"
-; .include "juddpeg.s"
+.include "jpgrender.s"
 .include "irqload.s"
 
 .include "drivers/mouse.s"

@@ -265,10 +265,10 @@ jpg_skipff				.byte 0
 jpg_filepos				.byte 0, 0, 0				; can probably get rid of this
 jpg_reslen				.word 0						; lame restart markers
 
-.define jpg_negmlo		$0a00						; $0A00-$1000 DATA BLOCK!!!
-.define jpg_posmlo		$0b00						; mult tables
-.define jpg_negmhi		$0d00
-.define jpg_posmhi		$0e00						; 2 pages
+.define jpg_negmlo		$0400						; $0A00-$1000 DATA BLOCK!!!
+.define jpg_posmlo		$0500						; mult tables
+.define jpg_negmhi		$0600
+.define jpg_posmhi		$0700						; 2 pages
 
 .define jpg_a1216		46341						; a1 * 2^16
 .define jpg_a2216		35468						; a2 * 2^16
@@ -276,6 +276,7 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_a4216		20091						; ...
 .define jpg_a5216		25080
 
+/*
 .define jpg_a1lo		$2900						; cos(2a), a=pi/8
 .define jpg_a1hi		$2a00
 .define jpg_a2lo		$2b00						; cos(a) - cos(3a)
@@ -294,7 +295,28 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_sec4		$3800
 .define jpg_sec5		$3a00
 .define jpg_sec6		$3c00
-.define jpg_sec7		$3e00
+.define jpg_sec7		$3e00						; ends $4000
+*/
+
+.define jpg_a1lo		$0900						; cos(2a), a=pi/8
+.define jpg_a1hi		$0a00
+.define jpg_a2lo		$0b00						; cos(a) - cos(3a)
+.define jpg_a2hi		$0c00
+.define jpg_a3lo		jpg_a1lo					; cos(2a)
+.define jpg_a3hi		jpg_a1hi
+.define jpg_a4lo		$0d00						; cos(a) + cos(3a)
+.define jpg_a4hi		$0e00
+.define jpg_a4gh		$0f00
+.define jpg_a5lo		$1000						; cos(3a)
+.define jpg_a5hi		$1100
+
+.define jpg_sec1		$1200
+.define jpg_sec2		$1400
+.define jpg_sec3		$1600
+.define jpg_sec4		$1800
+.define jpg_sec5		$1a00
+.define jpg_sec6		$1c00
+.define jpg_sec7		$1e00						; ends $4000
 
 
 .define jpg_crtab1		$8400						; rgb conversion
@@ -315,9 +337,7 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_crbuf		jpg_imgbuf+$2600			; $ad00
 
 .define jpg_point		$02
-
 .define jpg_dest		$04
-
 .define jpg_bitslo		$06							; and dequantize
 .define jpg_bitshi		$07
 
@@ -325,15 +345,6 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_mult1hi		$0a
 .define jpg_mult2lo		$0c
 .define jpg_mult2hi		$0e
-
-.define jpg_index		$20							; idct stuff
-
-.define jpg_t1			$22
-.define jpg_t2			$24
-.define jpg_t3			$26
-
-.define jpg_vsamp		$28							; desample
-.define jpg_hsamp		$29
 
 .define jpg_dct			$10
 .define jpg_f0			jpg_dct+0
@@ -344,6 +355,16 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_f5			jpg_dct+10
 .define jpg_f6			jpg_dct+12
 .define jpg_f7			jpg_dct+14
+
+.define jpg_index		$20							; idct stuff
+
+.define jpg_t1			$22
+.define jpg_t2			$24
+.define jpg_t3			$26
+
+.define jpg_vsamp		$28							; desample
+.define jpg_hsamp		$29
+
 
 .define jpg_coeff		$02a7
 .define jpg_c0			jpg_coeff+0
@@ -522,7 +543,7 @@ jpg_marker_sos
 		dec jpg_skipff								; skip $ff bytes
 		
 		; -------------------------------
-		;jsr rendinit
+		jsr jpg_rendinit
 		; -------------------------------
 
 		jsr sdc_getbyte
@@ -559,6 +580,9 @@ jpg_marker_sos
 		jsr restart
 
 jpg_sos_ready
+
+		inc $d020
+
 		ldx #1										; luma/intensity
 		lda #<jpg_ybuf
 		ldy #>jpg_ybuf
@@ -592,16 +616,7 @@ jpg_sos_readdone
 		cmp jpg_numcols
 		bcc jpg_sos_ready
 
-		; ------------------ ONE ROW DONE!!!
-		; ybuf now contains luma values - check if it looks ok!!!
-		inc $d020
-		jmp *-3
-		; ------------------ ONE ROW DONE!!!
-
 		jsr jpg_torgb
-
-
-
 
 		lda #00
 		sta jpg_col
@@ -611,16 +626,19 @@ jpg_sos_readdone
 		ldx jpg_csampv
 		stx jpg_temp2
 
+		;inc $d020
+		;jmp *-3
+
 jpg_sos_rend
 		sta jpg_temp+0
 		sty jpg_temp+1
 
-		ldx jpg_row
+		ldx jpg_row									; don't render anything if we haven't reached the start row yet
 		cpx jpg_rowoff
 		bcc jpg_sos_norend
 
 		; -----------------------------
-		;jsr render			; unto ceaser
+		jsr jpg_render
 		; -----------------------------
 
 jpg_sos_norend
@@ -2485,7 +2503,7 @@ jpg_readdataunit_loopy
 jpg_readdataunit_loopx
 		lda jpg_rend
 		sta jpg_rendflag
-		jsr jpg_fetch
+		jsr jpg_fetch								; FETCH!!!
 		lda jpg_error
 		bne jpg_readdataunit_end
 		lda jpg_curcol
