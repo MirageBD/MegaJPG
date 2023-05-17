@@ -273,6 +273,8 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_mult2lo		$0c
 .define jpg_mult2hi		$0e
 
+.define jpg_index		$20							; idct stuff
+
 .define jpg_t1			$22
 .define jpg_t2			$24
 .define jpg_t3			$26
@@ -286,6 +288,8 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_f5			jpg_dct+10
 .define jpg_f6			jpg_dct+12
 .define jpg_f7			jpg_dct+14
+
+
 
 .define jpg_coeff		$02a7
 .define jpg_c0			jpg_coeff+0
@@ -307,6 +311,8 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_posmlo		$0b00						; mult tables
 .define jpg_negmhi		$0d00
 .define jpg_posmhi		$0e00						; 2 pages
+
+.define jpg_trans		$8600						; transform
 
 .define jpg_veclo		$8680						; vec to be quantized
 .define jpg_vechi		$86c0
@@ -1533,12 +1539,12 @@ jpg_idct
 
 ; f(2) <- a1*f(2)
 
-		ldx jpg_f2        	   ; lo
-		ldy jpg_f2+1      	   ; hi
+		ldx jpg_f2									; lo
+		ldy jpg_f2+1								; hi
 		lda jpg_a1lo,y
 		clc
 		adc jpg_a1hi,x
-		sta jpg_bitslo    	   ; lo byte
+		sta jpg_bitslo								; lo byte
 		lda jpg_a1hi,y
 		adc #00
 		cpy #$80
@@ -1555,8 +1561,8 @@ jpg_idct
 
 ; f(1) = a3*f(1)
 
-		ldx jpg_f1       	    ; lo
-		ldy jpg_f1+1     	    ; hi
+		ldx jpg_f1									; lo
+		ldy jpg_f1+1								; hi
 		lda jpg_a3lo,y
 		clc
 		adc jpg_a3hi,x
@@ -1580,10 +1586,10 @@ jpg_idct
 		lda jpg_f5
 		clc
 		adc jpg_f7
-		tax					; lo
+		tax											; lo
 		lda jpg_f5+1
 		adc jpg_f7+1
-		tay					; hi
+		tay											; hi
 		lda jpg_a5lo,y
 		clc
 		adc jpg_a5hi,x
@@ -1611,8 +1617,8 @@ jpg_idct
 
 ; f(5) = t1 - a2*f(5)
 
-		ldx jpg_f5				; lo
-		ldy jpg_f5+1			; hi
+		ldx jpg_f5									; lo
+		ldy jpg_f5+1								; hi
 		lda jpg_a2lo,y
 		clc
 		adc jpg_a2hi,x
@@ -1638,14 +1644,14 @@ jpg_idct
 
 ; f(7) = a4*f(7) + t1
 
-		ldx jpg_f7				; lo
-		ldy jpg_f7+1			; hi
+		ldx jpg_f7									; lo
+		ldy jpg_f7+1								; hi
 		lda jpg_a4lo,y
 		clc
 		adc jpg_a4hi,x
 		sta jpg_bitslo
 		lda jpg_a4hi,y
-		adc jpg_a4gh,x			; a4*.x can be >255
+		adc jpg_a4gh,x								; a4*.x can be >255
 		cpy #$80
 		bcc :+
 		sta jpg_bitshi
@@ -1854,6 +1860,108 @@ jpg_idct
 		lda jpg_f0+1
 		sbc jpg_f3+1
 		sta jpg_c7+1
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpg_idct2d
+
+jpg_idct2d_cols										; first the columns
+
+		ldx #00
+ji2dcloop		
+		stx jpg_index
+		ldy #00
+:		lda jpg_trans,x
+		sta jpg_dct,y
+		lda jpg_trans+1,x
+		sta jpg_dct+1,y
+		txa
+		clc
+		adc #16
+		tax
+		iny
+		iny
+		cpy #16
+		bne :-
+		jsr jpg_idct
+		ldy #0
+		ldx jpg_index
+:		lda jpg_coeff,y
+		sta jpg_trans,x
+		lda jpg_coeff+1,y
+		sta jpg_trans+1,x
+		txa
+		clc
+		adc #16
+		tax
+		iny
+		iny
+		cpy #16
+		bne :-
+		ldx jpg_index
+		inx
+		inx
+		cpx #16
+		bcc ji2dcloop
+
+jpg_idct2d_rows										; then the rows
+
+		ldx #00
+		stx jpg_index
+		stx jpg_count
+ji2drloop		
+		ldy #00
+:		lda jpg_trans,x
+		sta jpg_dct,y
+		lda jpg_trans+1,x
+		sta jpg_dct+1,y
+		inx
+		inx
+		iny
+		iny
+		cpy #16
+		bne :-
+		stx jpg_index
+		jsr jpg_idct
+		ldy jpg_count
+		ldx #00
+:		lda jpg_coeff,x
+		sta jpg_bitslo
+		lda jpg_coeff+1,x
+		cmp #$80
+		ror
+		ror jpg_bitslo
+		cmp #$80
+		ror
+		ror jpg_bitslo
+		sta jpg_bitshi
+		lda jpg_bitslo
+		adc #128									; c determines rounding
+		; sta (dest),y
+		sta jpg_trans,y
+		lda jpg_bitshi								; range check
+		adc #00
+		beq ji2drcont
+		bpl ji2drpos
+		lda #00
+		.byte $2c
+ji2drpos
+		lda #$ff
+		; sta (dest),y
+		sta jpg_trans,y
+ji2drcont		
+		; inc dest
+		iny
+		inx
+		inx
+		cpx #16
+		bne :-
+		sty jpg_count
+		ldx jpg_index
+		cpx #128
+		bcc ji2drloop
+
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------

@@ -22,9 +22,6 @@ dest		= $04
 vsamp		= $28			; desample
 hsamp		= $29
 
-index		= $20			; idct stuff
-;coeff		= $30
-
 crtab1		= $8400			; rgb conversion
 crtab2		= $8480
 cbtab1		= $8500
@@ -573,122 +570,6 @@ torgb
 ; idct routines
 ;
 ;-------------------------------
-
-
-;trans	= $9000				; transform
-							; 128 bytes
-
-
-
-;coeff		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-
-idct2d
-
-; first the columns
-
-cols
-		ldx #00
-:l0		stx index
-		ldy #00
-:l1		lda trans,x
-		sta dct,y
-		lda trans+1,x
-		sta dct+1,y
-		txa
-		clc
-		adc #16
-		tax
-		iny
-		iny
-		cpy #16
-		bne :l1
-		jsr idct
-		ldy #0
-		ldx index
-:l1b	lda coeff,y
-		sta trans,x
-		lda coeff+1,y
-		sta trans+1,x
-		txa
-		clc
-		adc #16
-		tax
-		iny
-		iny
-		cpy #16
-		bne :l1b
-		ldx index
-		inx
-		inx
-		cpx #16
-		bcc :l0
-
-; then the rows
-rows
-		ldx #00
-		stx index
-		stx count
-:l0		ldy #00
-:l1		lda trans,x
-		sta dct,y
-		lda trans+1,x
-		sta dct+1,y
-		inx
-		inx
-		iny
-		iny
-		cpy #16
-		bne :l1
-		stx index
-		jsr idct
-		ldy count
-		ldx #00
-:l1b	lda coeff,x
-		sta bitslo
-		lda coeff+1,x
-		cmp #$80
-		ror
-		ror bitslo
-		cmp #$80
-		ror
-		ror bitslo
-		sta bitshi
-		lda bitslo
-		adc #128			; c determines rounding
-		; sta (dest),y
-		sta trans,y
-		lda bitshi			; range check
-		adc #00
-		beq :cont
-		bpl :pos
-		lda #00
-		.byte $2c
-:pos	lda #$ff
-		; sta (dest),y
-		sta trans,y
-:cont
-		; inc dest
-		iny
-		inx
-		inx
-		cpx #16
-		bne :l1b
-		sty count
-		ldx index
-		cpx #128
-		bcc :l0
-
-		rts
-
-;index		.word 0
-
-;dct		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-;coeff		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-
-
-;t1		.word 0
-;t2		.word 0
-;t3		.word 0
 
 
 
