@@ -14,7 +14,7 @@ rendinit	= $2000
 render		= $2003
 display		= $2006
 
-temp		= $fe
+
 quantp		= $fc			; quant table
 huff		= $fa			; huffman pointers
 temp2		= $f9
@@ -36,10 +36,6 @@ t3			= $26
 dct			= $10
 ;coeff		= $30
 
-qt0			= $0340			; quantization tables
-qt1			= qt0+64
-qt2			= qt1+64		; only use 3
-
 crtab1		= $8400			; rgb conversion
 crtab2		= $8480
 cbtab1		= $8500
@@ -54,13 +50,6 @@ ybuf		= imgbuf
 cbbuf		= imgbuf+$1300
 crbuf		= imgbuf+$2600
 
-notjpg		= 1				; errors
-readerr		= 2
-badqt		= 3
-badht		= 4
-headerr		= 5
-hufferr		= 6
-
 		jmp start
 		jmp idct2d
 
@@ -73,86 +62,6 @@ start
 		lda ateof
 		beq :loop
 
-:rts	jsr noscpu
-		jsr closefile
-		lda #00
-		sta $d020
-		jsr display
-		jmp :done
-
-:err1	lda #notjpg
-		.byte $2c
-:err3	lda #readerr
-		.byte $2c
-:err4	lda #headerr
-
-:err						; .a = err no
-		pha
-		jsr noscpu
-		jsr strout
-		.byte 13
-		txt 'error @ $',00
-		lda filepos+2
-		jsr hexout
-		lda filepos+1
-		jsr hexout
-		lda filepos
-		jsr hexout
-		lda #13
-		jsr $ffd2
-		pla
-		asl
-		tax
-		lda errtab,x
-		sta temp
-		lda errtab+1,x
-		sta temp+1
-		jsr closefile
-		lda #13
-		jsr $ffd2
-		ldy #00
-:loop2	lda (temp),y
-		beq :done
-		jsr $ffd2
-		iny
-		bne :loop2
-
-:done	lda #$77
-		sta $01
-		lda #$1b
-		sta $d011
-		lda #$14
-		sta $d018
-		lda #$08
-		sta $d016
-		lda $dd00
-		ora #$03
-		sta $dd00
-		lda #13
-		jsr $ffd2
-		lda #$00
-		sta $c6
-		jsr $e3bf
-		jsr $e453
-		jsr $a65e
-		jmp $a474
-
-errtab
-		.word 0
-		.word notjpg
-		.word readerr
-		.word dqt
-		.word dht
-		.word head
-		.word huff
-
-notjpg	.byte "not a jpeg!",  0
-readerr	.byte "read error",   0
-dqt		.byte "dqt error",    0
-dht		.byte "dht error",    0
-head	.byte "header err",   0
-huff	.byte "decoding err", 0
-
 ; bit patterns (masks)
 
 bitp	.byte $00
@@ -161,230 +70,6 @@ bitp	.byte $00
 
 ;		txt 'wyn wuz here'
 		.byte "-wyn-"
-
-;-------------------------------
-
-; zero out image buffer
-
-initbuff
-		lda #<imgbuf
-		sta point
-		lda #>imgbuf
-		sta point+1
-		ldx #>imgbufsize
-		lda #$80
-		ldy #$00
-:loop	sta (point),y
-		dey
-		bne :loop
-		inc point+1
-		dex
-		bne :loop
-		rts
-
-;
-; disable scpu mirroring
-;
-
-optscpu
-		lda #%10111100
-		sta $d07e
-		sta $d0b3
-		sta $d07f
-		rts
-
-noscpu						; enable
-		sta $d07e
-		sta $d077
-		sta $d07f
-		rts
-
-
-
-
-
-
-
-;
-; getfile -- open jpeg file.
-;
-getfile
-		lda #$00
-		sta $d020
-		sta $d021
-		sta nbits
-
-		jsr strout
-		.byte 13,5
-		txt 'jpz-ifli v.blah slj 12/8'
-		.byte 13,13
-		txt 'renderer by a. gonzalez'
-		.byte 13,13
-		txt 'file:',00
-
-		ldy #00
-:l2		jsr $ffcf
-		sta $0200,y			; filename
-		iny
-		cmp #13
-		bne :l2
-		jsr $ffd2
-		lda #','
-		sta $0200,y
-		iny
-		lda #'r'
-		sta $0200,y
-
-		tya
-		ldx #00
-		ldy #$02
-		jsr $ffbd			; setnam
-
-		jsr strout
-		txt 'col:0'
-		.byte 157, 0
-		jsr getnum
-		sta coloff
-
-		jsr strout
-		txt 'row:0'
-		.byte 157, 0
-		jsr getnum
-		sta rowoff
-
-		lda #2
-		tay
-		ldx $ba
-		jsr $ffba
-		jsr $ffc0			; open
-		bcs :error
-		lda $90
-		bne :error
-		ldx #2
-		jsr $ffc6			; chkin
-		bcs :error
-		rts					; c set -> error
-
-:error	jsr closefile
-		jsr strout
-		txt 'load error',00
-		sec
-:rts	rts
-
-getnum
-		lda #00
-:loop2	sta temp
-:loop	jsr $ffcf
-		cmp #13
-		beq :done
-		sec
-		sbc #'0'
-		sta temp+1
-		ldx #10				; cheesy *10 routine
-		lda #00
-		clc
-:l2		adc temp
-		dex
-		bne :l2
-		adc temp+1
-		jmp :loop2
-:done	jsr $ffd2
-		lda temp
-		rts
-
-closefile
-		lda #2
-		jsr $ffc3			; close
-		jmp $ffcc			; clrchn
-
-;
-; getbyte
-;
-
-getbyte
-		inc $d020
-		jsr getin
-		sta header
-		cmp #$ff
-		bne :rts
-		ldx skipff
-		beq :rts
-		jsr getin
-		sta header+1
-		cmp #$ff
-		beq getbyte			; $ffff -> skip
-		cmp #00				; $ff00 -> $ff
-		bne :rts
-		lda #$ff
-:rts	ldx $90
-		stx ateof
-		cpx #64
-		rts					; c set -> error
-
-getin
-		inc filepos
-		bne :c1
-		inc filepos+1
-		bne :c1
-		inc filepos+2
-:c1		jmp $ffa5			; IECIN. Read byte from serial bus. (Must call TALK and TALKSA beforehands.)
-
-;
-; getbit -- get next bit!
-;
-
-nbits	.byte 0				; # of bits left
-byte	.byte 0
-
-getbit
-		dec nbits
-		bpl :get
-		lda #7
-		sta nbits
-		jsr getbyte
-		sta byte
-:get	asl byte
-:rts	rts
-
-; print string
-
-strout
-		pla
-		tay
-		pla
-		sta :loop+2
-:loop	lda $c001,y
-		beq :exit
-		jsr $ffd2
-		iny
-		bne :loop
-		inc :loop+2
-		bne :loop
-:exit	lda :loop+2
-		cpy #$ff
-		iny
-		adc #00
-		pha
-		tya
-		pha
-		rts
-
-; print hex number
-
-hexout
-		pha
-		lsr
-		lsr
-		lsr
-		lsr
-		jsr :print
-		pla
-		and #$0f
-:print	cmp #10
-		bcc :c1
-		adc #6
-:c1		adc #48
-		jmp $ffd2
 
 ;--------------------------------
 ;
@@ -452,53 +137,6 @@ restart
 		dex
 		bpl :l2
 		rts
-
-; define quantization table
-
-dqt
-		jsr declen
-		beq :rts
-		jsr getbyte
-		bcs :err
-		tay
-		and #$0f			; number of qt
-		bne :c1
-		ldx #<qt0
-		lda #>qt0
-		bne :ok
-:c1		cmp #1
-		bne :c2
-		ldx #<qt1
-		lda #>qt1
-		bne :ok
-:c2		cmp #2
-		bne :err
-		ldx #<qt2
-		lda #>qt2
-
-:ok		stx point			; qt addr
-		sta point+1
-		tya
-		and #$f0
-		bne :err			; 0 = 8-bit
-		ldy #00
-:loop	sty temp			; counter
-		lda length
-		ora length+1
-		beq :err
-		jsr getbyte
-		bcs :err
-		ldy temp
-		sta (point),y
-		jsr declen
-		iny
-		cpy #64
-		bne :loop
-		jmp dqt				; multiple qt's allowed
-
-:err	lda #badqt			; only 0-3 allowed
-		sta error
-:rts	rts
 
 ; define huffman table
 

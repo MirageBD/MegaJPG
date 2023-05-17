@@ -254,33 +254,45 @@ c	; ----------------------------------------------------------------------------
 
 */
 
-jpg_consolelog
-				.repeat 80
-					.byte 0
-				.endrepeat
+jpg_consolelog			.repeat 80
+							.byte 0
+						.endrepeat
 
-jpg_error		.byte 0
-jpg_ateof		.byte 0
-jpg_skipff		.byte 0
+jpg_error				.byte 0
+jpg_eof					.byte 0
+jpg_skipff				.byte 0
 
-jpg_filepos		.byte 0, 0, 0						; can probably get rid of this
-jpg_reslen		.word 0								; lame restart markers
+jpg_filepos				.byte 0, 0, 0				; can probably get rid of this
+jpg_reslen				.word 0						; lame restart markers
 
 .define jpg_mult1lo		$08							; multiplication tables
 .define jpg_mult1hi		$0a
 .define jpg_mult2lo		$0c
 .define jpg_mult2hi		$0e
 
+.define jpg_temp		$fe
+
 .define jpg_negmlo		$0a00						; $0A00 DATA BLOCK!!!
 .define jpg_posmlo		$0b00						; mult tables
 .define jpg_negmhi		$0d00
 .define jpg_posmhi		$0e00						; 2 pages
 
+.define jpg_notjpg		1							; errors
+.define jpg_readerr		2
+.define jpg_badqt		3
+.define jpg_badht		4
+.define jpg_headerr		5
+.define jpg_hufferr		6
+
+.define jpg_qt0			$0340						; quantization tables
+.define jpg_qt1			jpg_qt0+64
+.define jpg_qt2			jpg_qt1+64					; only use 3
+
 jpg_process
 
 		lda #00
 		sta jpg_error
-		sta jpg_ateof
+		sta jpg_eof
 		sta jpg_skipff
 
 		lda #$ff
@@ -309,12 +321,18 @@ jpg_process
 		jsr jpg_inithuff
 		jsr jpg_initbuff
 
+		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_startaddentries
+		UICORE_SETLISTBOXTEXT la1listbox, uitxt_jpgstart
+
 		jsr jpg_getapp0
+
 :		lda jpg_error
 		bne jpg_err1
 		jsr jpg_domarker
-;		lda jpg_ateof
-;		beq :-
+		lda jpg_eof
+		beq :-
+
+		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_draw
 
 		rts
 
@@ -370,13 +388,13 @@ jpg_getapp0											; read jfif header
 		cmp #$e0									; app0 marker
 		beq jpg_ignoresegment
 
-		jmp jpg_domarker2
-:		jmp jpg_domarker
+		jmp jpg_domarker2							; doesn't hit?
+:		jmp jpg_domarker							; doesn't hit?
 
 jpg_ignoresegment									; ignore rest of segment
 		jsr sdc_getbyte
 		bcs :+
-		lda jpg_ateof
+		lda jpg_eof
 		bne :+
 		jsr jpg_declen
 		bne jpg_ignoresegment
@@ -389,8 +407,12 @@ jpg_ignoresegment									; ignore rest of segment
 ;   appropriate routine.
 ;
 
+jpg_marker_unknown
+		jsr jpg_ignoresegment
+		; fall through and get next marker
+
 jpg_domarker
-		lda jpg_ateof
+		lda jpg_eof
 		beq :+
 		rts
 
@@ -400,57 +422,108 @@ jpg_domarker
 jpg_domarker2
 		lda jpg_header+1
 		cmp #$dd
-		beq jpg_jmpmarkerdri
+		beq jpg_jmpmarker_dri
 		cmp #$db
-		beq jpg_jmpmarkerdqt
+		beq jpg_jmpmarker_dqt
 		cmp #$c4
-		beq jpg_jmpmarkerdht
+		beq jpg_jmpmarker_dht
 		cmp #$c0
-		beq jpg_jmpmarkersof
+		beq jpg_jmpmarker_sof
 		cmp #$da
-		bne jpg_markerunknown
+		bne jpg_marker_unknown
 
-jpg_jmpmarkersos
-		jmp jpg_markersos
-jpg_jmpmarkerdri
-		jmp jpg_markerdri
-jpg_jmpmarkerdqt
-		jmp jpg_markerdqt
-jpg_jmpmarkerdht
-		jmp jpg_markerdht
-jpg_jmpmarkersof
-		jmp jpg_markersof
+jpg_jmpmarker_sos
+		jmp jpg_marker_sos
+jpg_jmpmarker_dri
+		jmp jpg_marker_dri
+jpg_jmpmarker_dqt
+		jmp jpg_marker_dqt
+jpg_jmpmarker_dht
+		jmp jpg_marker_dht
+jpg_jmpmarker_sof
+		jmp jpg_marker_sof
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
-jpg_markerunknown
-		jsr jpg_ignoresegment
-
-jpg_markersos
+jpg_marker_sos
+		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_sos
+		inc jpg_eof
 		rts
 
-jpg_markerdri
+jpg_marker_dri
+		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dri
 		rts
 
-jpg_markerdqt
+jpg_marker_dqt
+		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dqt
+
+jpg_marker_dqt_start
+		jsr jpg_declen
+		beq jpg_marker_dqt_end
+		jsr sdc_getbyte
+		bcs jpg_marker_dqt_err
+		tay
+		and #$0f										; number of qt
+		bne :+
+		ldx #<(jpg_qt0)
+		lda #>(jpg_qt0)
+		bne dqt_ok
+:		cmp #1
+		bne :+
+		ldx #<(jpg_qt1)
+		lda #>(jpg_qt1)
+		bne dqt_ok
+:		cmp #2
+		bne jpg_marker_dqt_err
+		ldx #<(jpg_qt2)
+		lda #>(jpg_qt2)
+
+dqt_ok	stx jpg_point+0									; qt addr
+		sta jpg_point+1
+		tya
+		and #$f0
+		bne jpg_marker_dqt_err							; 0 = 8-bit
+		ldy #00
+dqt_loop
+		sty jpg_temp									; counter
+		lda jpg_headerlength+0
+		ora jpg_headerlength+1
+		beq jpg_marker_dqt_err
+		jsr sdc_getbyte
+		bcs jpg_marker_dqt_err
+		ldy jpg_temp
+		sta (jpg_point),y
+		jsr jpg_declen
+		iny
+		cpy #64
+		bne dqt_loop
+		jmp jpg_marker_dqt_start						; multiple qt's allowed
+
+jpg_marker_dqt_err
+		lda #jpg_badqt									; only 0-3 allowed
+		sta jpg_error
+
+jpg_marker_dqt_end
 		rts
 
-jpg_markerdht
+jpg_marker_dht
+		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dht
 		rts
 
-jpg_markersof
+jpg_marker_sof
+		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_sof
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
 jpg_declen
-		lda jpg_headerlength
-		bne :+
+		lda jpg_headerlength+0						; lo byte 0?
+		bne :+										; nope, decrease
 		ora jpg_headerlength+1
 		beq :++
 		dec jpg_headerlength+1
-:		dec jpg_headerlength
-		lda jpg_headerlength
+:		dec jpg_headerlength+0
+		lda jpg_headerlength+0
 		ora jpg_headerlength+1
 :		rts
 
@@ -465,12 +538,14 @@ jpg_headerlength	.word 0							; lo, hi
 ;   z set -> end of file
 
 jpg_getheader
+		;UICORE_SETLISTBOXTEXT la1listbox, uitxt_jpgheader
+
 		lda #00
 		sta jpg_header+0
 		sta jpg_header+1
 
 		jsr sdc_getbyte
-		cmp #$ff
+		cmp #$ff									; expect to find $ff marker
 		bne jpg_getheader_error
 
 		jsr sdc_getbyte
@@ -479,17 +554,17 @@ jpg_getheader
 		beq jpg_getheader_ok						; lame photoshop
 		cmp #$d9									; end of file
 		bne :+
-		sta jpg_ateof
+		sta jpg_eof
 		beq jpg_getheader_ok
 
-:		jsr sdc_getbyte
+:		jsr sdc_getbyte								; get high byte of length
 		bcs jpg_getheader_end
 		sta jpg_headerlength+1
-		jsr sdc_getbyte
+		jsr sdc_getbyte								; get lo byte of length
 		bcs jpg_getheader_end
 		sec
 		sbc #2
-		sta jpg_headerlength
+		sta jpg_headerlength+0						; subtract 2 from length (to get rid of first two bytes included in the length)
 		bcs :+
 		dec jpg_headerlength+1
 :		ora jpg_headerlength+1						; empty segment
@@ -504,6 +579,7 @@ jpg_getheader_error
 		;fallthrough
 
 jpg_getheader_end
+
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------

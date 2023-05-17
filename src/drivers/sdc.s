@@ -6,8 +6,6 @@
 sdc_bytecounterlo	.byte 0
 sdc_bytecounterhi	.byte 0
 
-sdc_bitcounter		.byte 0
-
 ; ----------------------------------------------------------------------------------------------------
 
 sdc_opendir
@@ -272,6 +270,23 @@ sdcgb	lda $babe
 		sta sdc_bytecounterhi
 		pla
 
+		clc
+
+		rts
+
+; ----------------------------------------------------------------------------------------------------
+
+sdc_nbits	.byte 0				; # of bits left
+sdc_byte	.byte 0
+
+sdc_getbit
+		dec sdc_nbits
+		bpl :+
+		lda #7
+		sta sdc_nbits
+		jsr sdc_getbyte
+		sta sdc_byte
+:		asl sdc_byte
 		rts
 
 ; ----------------------------------------------------------------------------------------------------

@@ -62,3 +62,16 @@
 
 		jsr ui_setflags
 .endmacro
+
+.macro UICORE_SETLISTBOXTEXT element, ptr
+	lda #<ptr
+	sta zpptrtmp2+0
+	lda #>ptr
+	sta zpptrtmp2+1
+	lda #$00
+	sta zpptrtmp2+2
+	sta zpptrtmp2+3
+	UICORE_CALLELEMENTFUNCTION element, uilistbox_addentry_additive
+	;UICORE_CALLELEMENTFUNCTION element, uilistbox_draw
+.endmacro
+
