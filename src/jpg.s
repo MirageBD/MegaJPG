@@ -265,11 +265,15 @@ jpg_skipff				.byte 0
 jpg_filepos				.byte 0, 0, 0				; can probably get rid of this
 jpg_reslen				.word 0						; lame restart markers
 
+.define jpg_bitslo		$06							; and dequantize
+.define jpg_bitshi		$07
+
 .define jpg_mult1lo		$08							; multiplication tables
 .define jpg_mult1hi		$0a
 .define jpg_mult2lo		$0c
 .define jpg_mult2hi		$0e
 
+.define jpg_count		$f8							; used by getbits, addnode amd decodeac
 .define jpg_temp2		$f9							; used for huffman nodes
 .define jpg_huff		$fa							; huffman pointers
 .define jpg_temp		$fe
@@ -278,6 +282,9 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_posmlo		$0b00						; mult tables
 .define jpg_negmhi		$0d00
 .define jpg_posmhi		$0e00						; 2 pages
+
+.define jpg_veclo		$8680						; vec to be quantized
+.define jpg_vechi		$86c0
 
 .define jpg_notjpg		1							; errors
 .define jpg_readerr		2
@@ -944,6 +951,191 @@ jpgancontinue
 		dey
 		sta (jpg_huff),y							; $80xx
 		clc
+		rts
+
+; ----------------------------------------------------------------
+
+; decode DC coeffs
+
+decodedc
+		ldx jpg_curcomp								; set huffman
+		lda jpg_dchuff,x
+		asl
+		tax
+		lda jpg_dchuff0,x
+		sta jpg_huff
+		lda jpg_dchuff0+1,x
+		sta jpg_huff+1
+
+		jsr jpg_gethuff								; get category
+		ldx jpg_error
+		bne :+
+		jsr jpg_getbits								; get the bits
+		ldx jpg_curcomp
+		lda jpg_bitslo
+		clc
+		adc jpg_dclo,x
+		sta jpg_dclo,x
+		sta jpg_veclo
+		lda jpg_dchi,x
+		adc jpg_bitshi
+		sta jpg_dchi,x
+		sta jpg_vechi
+:		rts
+
+; ----------------------------------------------------------------
+
+; decode AC coeffs
+
+jpg_tmphuf	.byte 0
+jpg_achuff	.byte 0, 0, 0, 0, 0, 0					; ac table to use
+jpg_dchuff	.byte 0, 0, 0, 0, 0, 0					; dc table to use
+jpg_dclo	.byte 0, 0, 0, 0, 0, 0					; dc coeffs
+jpg_dchi	.byte 0, 0, 0, 0, 0, 0
+
+jpg_curcomp	.byte 0
+
+jpg_decodeac
+		ldx jpg_curcomp								; set huffman
+		lda jpg_achuff,x
+		asl
+		tax
+		stx jpg_tmphuf
+
+		ldy #1
+decacloop
+		sty jpg_temp2								; index
+		ldx jpg_tmphuf
+		lda jpg_achuff0,x
+		sta jpg_huff
+		lda jpg_achuff0+1,x
+		sta jpg_huff+1
+
+		jsr jpg_gethuff								; get rle len
+		beq decacfill
+		ldx jpg_error
+		bne jpg_decodeac_end
+		sta jpg_count								; temp
+		lsr
+		lsr
+		lsr
+		lsr											; # of zeros
+		beq :++
+decacfill		
+		tax
+		lda #00
+		ldy jpg_temp2
+:		sta jpg_veclo,y
+		sta jpg_vechi,y
+		iny
+		cpy #64
+		bcs jpg_decodeac_end
+		dex
+		bne :-
+		sty jpg_temp2
+:		lda jpg_count
+		and #$0f									; category
+		jsr jpg_getbits
+		ldy jpg_temp2
+		lda jpg_bitslo
+		sta jpg_veclo,y
+		lda jpg_bitshi
+		sta jpg_vechi,y
+		iny
+		cpy #64
+		bcc decacloop
+
+jpg_decodeac_end		
+		rts
+
+; ----------------------------------------------------------------
+
+; gethuff -- get valid huffman code from (huff)
+
+jpg_gethuff
+		ldy #01
+		lda (jpg_huff),y
+		cmp #$80
+		beq jpgghfound
+
+		jsr sdc_getbit
+		bcs jpgghright
+		lda jpg_huff+0
+		adc #2										; c clear
+		tax
+		lda jpg_huff+1
+		adc #00
+		tay
+		cpx jpg_hufftop+0
+		sbc jpg_hufftop+1
+		bcs jpg_gethuff_error
+		sty jpg_huff+1
+		stx jpg_huff+0
+		bcc jpg_gethuff
+
+jpgghright
+		ldy #01
+		lda (jpg_huff),y
+		bmi jpg_gethuff_error
+		pha
+		dey
+		lda (jpg_huff),y
+		clc
+		adc jpg_huff+0
+		sta jpg_huff+0
+		pla
+		adc jpg_huff+1
+		sta jpg_huff+1
+		bne jpg_gethuff
+
+jpgghfound
+		dey
+		lda (jpg_huff),y
+		rts
+
+jpg_gethuff_error
+		lda #jpg_hufferr
+		sta jpg_error
+		rts
+
+; ----------------------------------------------------------------
+
+; retrieve .a bits and convert to signed number in (bitslo, bitshi)
+
+jpg_sign	.byte 0
+
+jpg_getbits
+		sta jpg_count
+		tax
+		beq jpg_getbits_zero
+		jsr sdc_getbit
+		lda #00
+		bcs :+
+		lda #$ff									; 0-> negative
+:		sta jpg_bitshi
+		rol
+		sta jpg_bitslo
+		sta jpg_sign
+		dec jpg_count
+		beq jpggbsdone
+jpggbsloop
+		jsr sdc_getbit
+		rol jpg_bitslo
+		rol jpg_bitshi
+		dec jpg_count
+		bne jpggbsloop
+jpggbsdone
+		lda jpg_sign
+		bpl jpggbsrts
+		inc jpg_bitslo								; make two's complement
+		bne jpggbsrts
+		inc jpg_bitshi
+jpggbsrts		
+		rts
+
+jpg_getbits_zero
+		sta jpg_bitslo
+		sta jpg_bitshi
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------

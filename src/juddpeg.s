@@ -16,13 +16,8 @@ display		= $2006
 
 
 quantp		= $fc			; quant table
-count		= $f8			; used by getbits
-							; and addnode
 
 dest		= $04
-
-bitslo		= $06			; and dequantize
-bitshi		= $07
 
 vsamp		= $28			; desample
 hsamp		= $29
@@ -40,9 +35,6 @@ cbtab1		= $8500
 cbtab2		= $8580
 
 trans		= $8600			; transform
-
-veclo		= $8680			; vec to be quantized
-vechi		= $86c0
 
 ybuf		= imgbuf
 cbbuf		= imgbuf+$1300
@@ -126,18 +118,12 @@ restart
 
 ; and finally -- start of scan!
 
-dclo	.byte 0,0,0,0,0,0	; dc coeffs
-dchi	.byte 0,0,0,0,0,0
-
 row		.byte 0
 col		.byte 0
 rowoff	.byte 0				; row offset
 coloff	.byte 0				; col offset
 buffpt	.word 0				; image buffer
 comp	.byte 0				; current component
-
-achuff	.byte 0,0,0,0,0,0	; ac table to use
-dchuff	.byte 0,0,0,0,0,0	; dc table to use
 
 sos
 		dec skipff			; skip $ff bytes
@@ -273,7 +259,6 @@ linelen		.word $0130
 buflen		.word $0980
 
 curbuf		.word 0
-curcomp		.byte 0
 rend		.byte 0
 currow		.byte 0
 curcol		.byte 0
@@ -386,86 +371,7 @@ fetch
 ; decode dc coeff.
 ;
 
-decodedc
-		ldx curcomp			; set huffman
-		lda dchuff,x
-		asl
-		tax
-		lda dchuff0,x
-		sta huff
-		lda dchuff0+1,x
-		sta huff+1
 
-		jsr gethuff			; get category
-		ldx error
-		bne :rts
-		jsr getbits			; get the bits
-		ldx curcomp
-		lda bitslo
-		clc
-		adc dclo,x
-		sta dclo,x
-		sta veclo
-		lda dchi,x
-		adc bitshi
-		sta dchi,x
-		sta vechi
-:rts	rts
-
-;
-; decode ac coeffs
-;
-
-tmphuf	.byte 0
-
-decodeac
-		ldx curcomp			; set huffman
-		lda achuff,x
-		asl
-		tax
-		stx tmphuf
-
-		ldy #1
-:loop	sty temp2			; index
-		ldx tmphuf
-		lda achuff0,x
-		sta huff
-		lda achuff0+1,x
-		sta huff+1
-
-		jsr gethuff			; get rle len
-		beq :fill
-		ldx error
-		bne :done
-		sta count			; temp
-		lsr
-		lsr
-		lsr
-		lsr					; # of zeros
-		beq :skip
-:fill	tax
-		lda #00
-		ldy temp2
-:lout	sta veclo,y
-		sta vechi,y
-		iny
-		cpy #64
-		bcs :done
-		dex
-		bne :lout
-		sty temp2
-:skip	lda count
-		and #$0f			; category
-		jsr getbits
-		ldy temp2
-		lda bitslo
-		sta veclo,y
-		lda bitshi
-		sta vechi,y
-		iny
-		cpy #64
-		bcc :loop
-:done	rts
 
 ;
 ; dequantize the vector vec
@@ -730,92 +636,12 @@ torgb
 		bcc :jmp
 		rts
 
-;
-; retrieve .a bits and convert
-; to signed number in (bitslo, bitshi)
-;
-sign	.byte 0
-
-getbits
-		sta count
-		tax
-		beq :zero
-		jsr getbit
-		lda #00
-		bcs :c1
-		lda #$ff			; 0-> negative
-:c1		sta bitshi
-		rol
-		sta bitslo
-		sta sign
-		dec count
-		beq :done
-:loop	jsr getbit
-		rol bitslo
-		rol bitshi
-		dec count
-		bne :loop
-:done	lda sign
-		bpl :rts
-		inc bitslo			; make 2's comp
-		bne :rts
-		inc bitshi
-:rts	rts
-
-:zero	sta bitslo
-		sta bitshi
-		rts
 
 
 
 
-;
-; gethuff -- get valid huffman code
-;   from (huff)
-;
 
-gethuff
-		ldy #01
-		lda (huff),y
-		cmp #$80
-		beq :found
 
-		jsr getbit
-		bcs :right
-		lda huff
-		adc #2				; c clear
-		tax
-		lda huff+1
-		adc #00
-		tay
-		cpx hufftop
-		sbc hufftop+1
-		bcs :err
-		sty huff+1
-		stx huff
-		bcc gethuff
-
-:right	ldy #01
-		lda (huff),y
-		bmi :err
-		pha
-		dey
-		lda (huff),y
-		clc
-		adc huff
-		sta huff
-		pla
-		adc huff+1
-		sta huff+1
-		bne gethuff
-
-:found	dey
-		lda (huff),y
-		rts
-
-:err	lda #hufferr
-		sta error
-		rts
 
 ;-------------------------------
 ;
