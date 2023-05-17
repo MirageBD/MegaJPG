@@ -448,8 +448,41 @@ jpg_marker_sos
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
-jpg_marker_dri
+jpg_cres	.word 0
+
+jpg_marker_dri										; lame restart interval markers
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dri
+
+		jsr sdc_getbyte
+		sta jpg_reslen+1
+		sta jpg_cres+1
+		jsr sdc_getbyte
+		sta jpg_reslen+0
+		sta jpg_cres+0
+		rts
+
+decres	lda jpg_reslen+1
+		cmp #$ff
+		beq :+
+
+		dec jpg_cres+0
+		bne :+
+		lda jpg_cres+1
+		beq :++
+		dec jpg_cres+1
+:		rts
+:		sta sdc_nbits								; skip bits
+		jsr sdc_getbyte								; read $ffxx
+		lda jpg_reslen+0
+		sta jpg_cres+0
+		lda jpg_reslen+1
+		sta jpg_cres+1
+
+restart	ldx #5
+:		sta jpg_dclo,x
+		sta jpg_dchi,x
+		dex
+		bpl :-
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
@@ -463,7 +496,7 @@ jpg_marker_dqt_start
 		jsr sdc_getbyte
 		bcs jpg_marker_dqt_err
 		tay
-		and #$0f										; number of qt
+		and #$0f									; number of qt
 		bne :+
 		ldx #<(jpg_qt0)
 		lda #>(jpg_qt0)
@@ -478,14 +511,14 @@ jpg_marker_dqt_start
 		ldx #<(jpg_qt2)
 		lda #>(jpg_qt2)
 
-dqt_ok	stx jpg_point+0									; qt addr
+dqt_ok	stx jpg_point+0								; qt addr
 		sta jpg_point+1
 		tya
 		and #$f0
-		bne jpg_marker_dqt_err							; 0 = 8-bit
+		bne jpg_marker_dqt_err						; 0 = 8-bit
 		ldy #00
 dqt_loop
-		sty jpg_temp									; counter
+		sty jpg_temp								; counter
 		lda jpg_headerlength+0
 		ora jpg_headerlength+1
 		beq jpg_marker_dqt_err
@@ -497,10 +530,10 @@ dqt_loop
 		iny
 		cpy #64
 		bne dqt_loop
-		jmp jpg_marker_dqt_start						; multiple qt's allowed
+		jmp jpg_marker_dqt_start					; multiple qt's allowed
 
 jpg_marker_dqt_err
-		lda #jpg_badqt									; only 0-3 allowed
+		lda #jpg_badqt								; only 0-3 allowed
 		sta jpg_error
 
 jpg_marker_dqt_end
@@ -524,19 +557,19 @@ dhtgetb	jsr sdc_getbyte
 dhtjerr	jmp jpg_marker_dht_error
 
 dhtcont
-		tay												; info byte
+		tay											; info byte
 		and #$0f
 		cmp #$04
 		bcs dhtjerr
 		asl
-		tax												; table num 0-3
+		tax											; table num 0-3
 		tya
 		and #$f0
-		beq dht_ok										; dc table
+		beq dht_ok									; dc table
 		cmp #$10
 		bne dhtjerr
-		txa												; ac table
-		ora #$08										; +8
+		txa											; ac table
+		ora #$08									; +8
 		tax
 
 dht_ok		
@@ -547,8 +580,8 @@ dht_ok
 		sta jpg_dchuff0+1,x
 		sta jpg_huff+1
 		stx jpg_temp2
-		ldy #01											; right node
-		jsr jpg_newnode									; root node
+		ldy #01										; right node
+		jsr jpg_newnode								; root node
 
 		ldx #01
 :		stx jpg_temp
@@ -570,7 +603,7 @@ dht_ok
 		lda #1
 		sta jpg_hufflen
 
-dhtloop	inc jpg_huffbits+1									; hi,lo!
+dhtloop	inc jpg_huffbits+1							; hi,lo!
 		bne :+
 		inc jpg_huffbits
 
@@ -598,7 +631,7 @@ dhtloop	inc jpg_huffbits+1									; hi,lo!
 		jmp dhtloop
 dhtnext	jsr jpg_declen
 		beq jpg_marker_dht_end
-		jmp dhtgetb										; multiple hts
+		jmp dhtgetb									; multiple hts
 
 jpg_marker_dht_error
 		lda #jpg_badht
@@ -613,10 +646,10 @@ jpg_height	.word 0
 jpg_width	.word 0
 jpg_numrows	.byte 0
 jpg_numcols	.byte 0
-jpg_ncomps	.byte 0										; num components
-jpg_csampv	.byte 0,0,0,0,0,0							; sampling factors
-jpg_csamph	.byte 0,0,0,0,0,0							; (horizontal)
-jpg_cquant	.byte 0,0,0,0,0,0							; quantization table
+jpg_ncomps	.byte 0									; num components
+jpg_csampv	.byte 0,0,0,0,0,0						; sampling factors
+jpg_csamph	.byte 0,0,0,0,0,0						; (horizontal)
+jpg_cquant	.byte 0,0,0,0,0,0						; quantization table
 
 jpg_marker_sof
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_sof
@@ -658,7 +691,7 @@ sof_ok	jsr sof_get
 		jsr sof_get
 		sta jpg_width
 		sec
-		sbc #1											; 0..7 instead of 1..8
+		sbc #1										; 0..7 instead of 1..8
 		sta jpg_numcols
 		lda jpg_width+1
 		sbc #00
@@ -668,14 +701,14 @@ sof_ok	jsr sof_get
 		ror jpg_numcols
 		lsr
 		ror jpg_numcols
-		inc jpg_numcols									; 0..7 => 1 col, etc.
+		inc jpg_numcols								; 0..7 => 1 col, etc.
 
 		jsr sof_get
 		sta jpg_ncomps
 		sta jpg_temp+0
 sof_loop		
 		jsr sof_get
-		sta jpg_temp+1									; id
+		sta jpg_temp+1								; id
 		jsr sof_get
 		ldx jpg_temp+1
 		pha
@@ -693,14 +726,14 @@ sof_loop
 		dec jpg_temp
 		bne sof_loop
 
-		ldx #5											; find max sample
+		ldx #5										; find max sample
 		lda #00
 :		cmp jpg_csamph,x
 		bcs :+
 		lda jpg_csamph,x
 :		dex
 		bne :-
-		sta jpg_csamph									; store in +0
+		sta jpg_csamph								; store in +0
 
 		ldx #5
 		lda #00

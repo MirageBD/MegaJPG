@@ -71,48 +71,6 @@ comment
 :rts	lda #13
 		jmp $ffd2
 
-; lame restart markers
-
-cres	.word 0
-
-dri
-		jsr getin
-		sta reslen+1
-		sta cres+1
-		jsr getin
-		sta reslen
-		sta cres
-		rts
-
-decres
-		lda reslen+1
-		cmp #$ff
-		beq :rts
-
-		dec cres
-		bne :rts
-		lda cres+1
-		beq :restart
-		dec cres+1
-:rts	rts
-
-:restart
-		sta nbits			; skip bits
-		jsr getbyte			; read $ffxx
-		lda reslen
-		sta cres
-		lda reslen+1
-		sta cres+1
-restart
-		ldx #5
-:l2		sta dclo,x
-		sta dchi,x
-		dex
-		bpl :l2
-		rts
-
-; define huffman table
-
 
 
 
@@ -366,12 +324,6 @@ fetch
 :c1		rts
 
 ;-------------------------------
-
-;
-; decode dc coeff.
-;
-
-
 
 ;
 ; dequantize the vector vec
