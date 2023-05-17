@@ -285,6 +285,9 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_t2			$24
 .define jpg_t3			$26
 
+.define jpg_vsamp		$28							; desample
+.define jpg_hsamp		$29
+
 .define jpg_dct			$10
 .define jpg_f0			jpg_dct+0
 .define jpg_f1			jpg_dct+2
@@ -2117,6 +2120,55 @@ jpg_torgb_done
 		lda jpg_ypoint+1
 		cmp #>jpg_cbbuf
 		bcc :--
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+; desample -- expand dct square by sample factor and reorg data.
+; on entry: dest = destination buffer
+
+jpg_linelen		.word $0130
+
+jpg_desample 
+
+		lda #00
+jpg_desample_newrow		
+		ldx jpg_vsamp
+		stx jpg_huff								; temporary
+jpg_desample_oldrow
+		sta jpg_temp2								; current element
+		lda #8
+		sta jpg_count								; column
+		ldy #00
+:		ldx jpg_temp2
+		lda jpg_trans,x
+		ldx jpg_hsamp
+
+jpg_desample_expand		
+		sta (jpg_dest),y
+		iny
+		dex
+		bne jpg_desample_expand
+		inc jpg_temp2
+		dec jpg_count
+		bne :-
+
+		lda jpg_dest								; next scanline
+		clc
+		adc jpg_linelen
+		sta jpg_dest
+		lda jpg_dest+1
+		adc jpg_linelen+1
+		sta jpg_dest+1
+
+		lda jpg_temp2
+		sec
+		sbc #8										; start of row
+		dec jpg_huff								; horizonal sampling
+		bne jpg_desample_oldrow
+		lda jpg_temp2
+		cmp #64
+		bne jpg_desample_newrow
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------

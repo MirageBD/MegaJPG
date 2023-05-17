@@ -16,8 +16,6 @@ display		= $2006
 
 quantp		= $fc			; quant table
 
-vsamp		= $28			; desample
-hsamp		= $29
 
 
 
@@ -171,7 +169,6 @@ readdone
 
 ; buffer size = 38*8 = $0130 * 8 lines
 
-linelen		.word $0130
 buflen		.word $0980
 
 curbuf		.word 0
@@ -363,51 +360,6 @@ dequantize
 		bpl :loop
 		rts
 
-;
-; desample -- expand dct square by sample factor and reorg data.
-; on entry: dest = destination buffer
-;
-
-;curpos		.word 0			; buffer position
-;bufcol		.byte 0			; buffer column
-
-desample 
-		lda #00
-:newrow	ldx vsamp
-		stx huff			; temporary
-:oldrow	sta temp2			; current element
-		lda #8
-		sta count			; column
-		ldy #00
-:l1		ldx temp2
-		lda trans,x
-		ldx hsamp
-:expand
-		sta (dest),y
-		iny
-		dex
-		bne :expand
-		inc temp2
-		dec count
-		bne :l1
-
-		lda dest			; next scanline
-		clc
-		adc linelen
-		sta dest
-		lda dest+1
-		adc linelen+1
-		sta dest+1
-
-		lda temp2
-		sec
-		sbc #8				; start of row
-		dec huff			; horizonal sampling
-		bne :oldrow
-		lda temp2
-		cmp #64
-		bne :newrow
-		rts
 
 
 
