@@ -14,7 +14,6 @@ rendinit	= $2000
 render		= $2003
 display		= $2006
 
-quantp		= $fc			; quant table
 
 
 
@@ -279,88 +278,6 @@ fetch
 :c1		rts
 
 ;-------------------------------
-
-;
-; dequantize the vector vec
-;
-; mult is 16 bit signed x 8 bit unsigned
-; with 16-bit result, so sign etc. are
-; taken care of automatically.
-;
-; result -> trans
-;
-quanttab
-		.word qt0
-		.word qt1
-		.word qt2
-
-; table to un-zigzag coeffs
-; multiples of 2, since 2 byte result.
-
-zigzag
-		.byte   0,   2,   16,  32,  18,   4,   6,  20
-		.byte  34,  48,   64,  50,  36,  22,   8,  10
-		.byte  24,  38,   52,  66,  80,  96,  82,  68
-		.byte  54,  40,   26,  12,  14,  28,  42,  56
-		.byte  70,  84,   98, 112, 114, 100,  86,  72
-		.byte  58,  44,   30,  46,  60,  74,  88, 102
-		.byte  116, 118, 104,  90,  76,  62,  78,  92
-		.byte  106, 120, 122, 108,  94, 110, 124, 126
-
-dequantize
-		ldx curcomp
-		lda cquant,x
-		asl
-		tax
-		lda quanttab,x
-		sta quantp
-		lda quanttab+1,x
-		sta quantp+1
-
-		ldx #63
-:loop	txa
-		tay
-		lda (quantp),y
-		sta mult1lo
-		sta mult1hi
-		eor #$ff
-		clc
-		adc #1
-		sta mult2lo
-		sta mult2hi
-
-		ldy veclo,x
-		bne :c1
-		sty bitslo
-		sty bitshi
-		beq :high
-:c1
-		lda (mult1lo),y
-		sec
-		sbc (mult2lo),y
-		sta bitslo
-		lda (mult1hi),y
-		sbc (mult2hi),y
-		sta bitshi
-
-:high	ldy vechi,x
-		lda (mult1lo),y
-		sec
-		sbc (mult2lo),y
-		clc
-		adc bitshi
-
-		ldy zigzag,x		; un-zigzag
-		iny
-		sta trans,y
-		dey
-		lda bitslo
-		sta trans,y
-		dex
-		bpl :loop
-		rts
-
-
 
 
 */

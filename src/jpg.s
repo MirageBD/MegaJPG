@@ -312,6 +312,7 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_count		$f8							; used by getbits, addnode amd decodeac
 .define jpg_temp2		$f9							; used for huffman nodes
 .define jpg_huff		$fa							; huffman pointers
+.define jpg_quantp		$fc							; quant table
 .define jpg_temp		$fe
 
 .define jpg_negmlo		$0a00						; $0A00 DATA BLOCK!!!
@@ -618,7 +619,7 @@ dhtcont
 dht_ok		
 		lda jpg_hufftop
 		sta jpg_dchuff0,x
-		sta jpg_huff
+		sta jpg_huff+0
 		lda jpg_hufftop+1
 		sta jpg_dchuff0+1,x
 		sta jpg_huff+1
@@ -662,7 +663,7 @@ dhtloop	inc jpg_huffbits+1							; hi,lo!
 
 :		ldx jpg_temp2
 		lda jpg_dchuff0,x
-		sta jpg_huff
+		sta jpg_huff+0
 		lda jpg_dchuff0+1,x
 		sta jpg_huff+1
 		jsr sdc_getbyte
@@ -980,7 +981,7 @@ jpg_anloop
 		bne jpg_anright
 
 jpg_anleft
-		lda jpg_huff								; check if at end
+		lda jpg_huff+0								; check if at end
 		clc
 		adc #2
 		pha
@@ -988,7 +989,7 @@ jpg_anleft
 		lda jpg_huff+1
 		adc #00
 		pha
-		cpy jpg_hufftop
+		cpy jpg_hufftop+0
 		sbc jpg_hufftop+1
 		bcc :+										; not a new node
 		ldy #$80									; create left node
@@ -996,7 +997,7 @@ jpg_anleft
 :		pla
 		sta jpg_huff+1
 		pla
-		sta jpg_huff
+		sta jpg_huff+0
 		jmp jpgancontinue
 
 jpg_anright
@@ -1008,14 +1009,14 @@ jpg_anright
 :		ldy #00
 		lda (jpg_huff),y
 		clc
-		adc jpg_huff
+		adc jpg_huff+0
 		pha
 		iny
 		lda (jpg_huff),y
 		adc jpg_huff+1
 		sta jpg_huff+1
 		pla
-		sta jpg_huff
+		sta jpg_huff+0
 
 jpgancontinue
 		dex
@@ -1039,7 +1040,7 @@ decodedc
 		asl
 		tax
 		lda jpg_dchuff0,x
-		sta jpg_huff
+		sta jpg_huff+0
 		lda jpg_dchuff0+1,x
 		sta jpg_huff+1
 
@@ -1083,7 +1084,7 @@ decacloop
 		sty jpg_temp2								; index
 		ldx jpg_tmphuf
 		lda jpg_achuff0,x
-		sta jpg_huff
+		sta jpg_huff+0
 		lda jpg_achuff0+1,x
 		sta jpg_huff+1
 
@@ -2169,6 +2170,81 @@ jpg_desample_expand
 		lda jpg_temp2
 		cmp #64
 		bne jpg_desample_newrow
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+; dequantize the vector vec
+; mult is 16 bit signed x 8 bit unsigned with 16-bit result, so sign etc. are taken care of automatically.
+; result -> trans
+
+jpg_quanttab
+		.word jpg_qt0
+		.word jpg_qt1
+		.word jpg_qt2
+
+jpg_zigzag
+		.byte   0,   2,   16,  32,  18,   4,   6,  20		; table to un-zigzag coeffs
+		.byte  34,  48,   64,  50,  36,  22,   8,  10		; multiples of 2, since 2 byte result.
+		.byte  24,  38,   52,  66,  80,  96,  82,  68
+		.byte  54,  40,   26,  12,  14,  28,  42,  56
+		.byte  70,  84,   98, 112, 114, 100,  86,  72
+		.byte  58,  44,   30,  46,  60,  74,  88, 102
+		.byte  116, 118, 104,  90,  76,  62,  78,  92
+		.byte  106, 120, 122, 108,  94, 110, 124, 126
+
+jpg_dequantize
+		ldx jpg_curcomp
+		lda jpg_cquant,x
+		asl
+		tax
+		lda jpg_quanttab,x
+		sta jpg_quantp
+		lda jpg_quanttab+1,x
+		sta jpg_quantp+1
+
+		ldx #63
+jpg_dequantize_loop
+		txa
+		tay
+		lda (jpg_quantp),y
+		sta jpg_mult1lo
+		sta jpg_mult1hi
+		eor #$ff
+		clc
+		adc #1
+		sta jpg_mult2lo
+		sta jpg_mult2hi
+
+		ldy jpg_veclo,x
+		bne :+
+		sty jpg_bitslo
+		sty jpg_bitshi
+		beq jpg_dequantize_high
+:		lda (jpg_mult1lo),y
+		sec
+		sbc (jpg_mult2lo),y
+		sta jpg_bitslo
+		lda (jpg_mult1hi),y
+		sbc (jpg_mult2hi),y
+		sta jpg_bitshi
+
+jpg_dequantize_high
+		ldy jpg_vechi,x
+		lda (jpg_mult1lo),y
+		sec
+		sbc (jpg_mult2lo),y
+		clc
+		adc jpg_bitshi
+
+		ldy jpg_zigzag,x		; un-zigzag
+		iny
+		sta jpg_trans,y
+		dey
+		lda jpg_bitslo
+		sta jpg_trans,y
+		dex
+		bpl jpg_dequantize_loop
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
