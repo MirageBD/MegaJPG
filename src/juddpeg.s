@@ -170,11 +170,6 @@ readdone
 
 buflen		.word $0980
 
-curbuf		.word 0
-rend		.byte 0
-currow		.byte 0
-curcol		.byte 0
-rendflag	.byte 0
 
 readdu
 		sta curbuf
@@ -237,45 +232,6 @@ readdu
 		bne :loopy
 :rts	rts
 
-;
-; fetch the data
-;
-fetch
-		lda #00
-		sta dest+1
-		lda curcol
-		cmp #37				; catches neg too
-		rol rendflag		; c set?
-
-		asl					; offset = col*8
-		rol dest+1
-		asl
-		rol dest+1
-		asl
-		rol dest+1
-		adc curbuf			; ybuf, etc.
-		sta dest 			; data storage
-		lda curbuf+1
-		adc dest+1
-		sta dest+1
-:decode
-		jsr decodedc
-		lda error
-		bne :c1
-		jsr decodeac
-		lda error
-		bne :c1
-		lda rendflag
-		bne :c1
-		jsr dequantize
-		jsr idct2d
-		jmp desample
-
-;;;; debug
-;         jmp printdu  ;debug
-;;;; debug
-
-:c1		rts
 
 ;-------------------------------
 

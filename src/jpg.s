@@ -1034,7 +1034,7 @@ jpgancontinue
 
 ; decode DC coeffs
 
-decodedc
+jpg_decodedc
 		ldx jpg_curcomp								; set huffman
 		lda jpg_dchuff,x
 		asl
@@ -2237,7 +2237,7 @@ jpg_dequantize_high
 		clc
 		adc jpg_bitshi
 
-		ldy jpg_zigzag,x		; un-zigzag
+		ldy jpg_zigzag,x							; un-zigzag
 		iny
 		sta jpg_trans,y
 		dey
@@ -2246,5 +2246,46 @@ jpg_dequantize_high
 		dex
 		bpl jpg_dequantize_loop
 		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpg_curbuf		.word 0
+jpg_rend		.byte 0
+jpg_currow		.byte 0
+jpg_curcol		.byte 0
+jpg_rendflag	.byte 0
+
+jpg_fetch											; fetch the data
+		lda #00
+		sta jpg_dest+1
+		lda jpg_curcol
+		cmp #37										; catches neg too
+		rol jpg_rendflag							; c set?
+
+		asl											; offset = col*8
+		rol jpg_dest+1
+		asl
+		rol jpg_dest+1
+		asl
+		rol jpg_dest+1
+		adc jpg_curbuf								; ybuf, etc.
+		sta jpg_dest+0 								; data storage
+		lda jpg_curbuf+1
+		adc jpg_dest+1
+		sta jpg_dest+1
+:decode
+		jsr jpg_decodedc
+		lda jpg_error
+		bne :+
+		jsr jpg_decodeac
+		lda jpg_error
+		bne :+
+		lda jpg_rendflag
+		bne :+
+		jsr jpg_dequantize
+		jsr jpg_idct2d
+		jmp jpg_desample
+
+:		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
