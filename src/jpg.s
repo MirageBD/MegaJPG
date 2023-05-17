@@ -450,9 +450,13 @@ jpg_marker_sos
 		inc jpg_eof
 		rts
 
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
 jpg_marker_dri
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dri
 		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
 
 jpg_marker_dqt
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dqt
@@ -506,12 +510,134 @@ jpg_marker_dqt_err
 jpg_marker_dqt_end
 		rts
 
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
 jpg_marker_dht
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dht
 		rts
 
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpg_height	.word 0
+jpg_width	.word 0
+jpg_numrows	.byte 0
+jpg_numcols	.byte 0
+jpg_ncomps	.byte 0										; num components
+jpg_csampv	.byte 0,0,0,0,0,0							; sampling factors
+jpg_csamph	.byte 0,0,0,0,0,0							; (horizontal)
+jpg_cquant	.byte 0,0,0,0,0,0							; quantization table
+
 jpg_marker_sof
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_sof
+
+jpg_marker_sof_start
+		ldx #5
+		lda #00
+:		sta jpg_csampv,x
+		sta jpg_csamph,x
+		dex
+		bpl :-
+
+		jsr sof_get
+		cmp #8
+		beq sof_ok
+		lda #jpg_badqt
+		sta jpg_error
+		rts
+
+sof_ok	jsr sof_get
+		sta jpg_height+1
+		jsr sof_get
+		sta jpg_height
+		sec
+		sbc #1
+		sta jpg_numrows
+		lda jpg_height+1
+		sbc #00
+		lsr
+		ror jpg_numrows
+		lsr
+		ror jpg_numrows
+		lsr
+		ror jpg_numrows
+		inc jpg_numrows
+
+		jsr sof_get
+		sta jpg_width+1
+		jsr sof_get
+		sta jpg_width
+		sec
+		sbc #1											; 0..7 instead of 1..8
+		sta jpg_numcols
+		lda jpg_width+1
+		sbc #00
+		lsr
+		ror jpg_numcols
+		lsr
+		ror jpg_numcols
+		lsr
+		ror jpg_numcols
+		inc jpg_numcols									; 0..7 => 1 col, etc.
+
+		jsr sof_get
+		sta jpg_ncomps
+		sta jpg_temp+0
+sof_loop		
+		jsr sof_get
+		sta jpg_temp+1									; id
+		jsr sof_get
+		ldx jpg_temp+1
+		pha
+		and #$0f
+		sta jpg_csampv,x
+		pla
+		lsr
+		lsr
+		lsr
+		lsr
+		sta jpg_csamph,x
+		jsr sof_get
+		ldx jpg_temp+1
+		sta jpg_cquant,x
+		dec jpg_temp
+		bne sof_loop
+
+		ldx #5											; find max sample
+		lda #00
+:		cmp jpg_csamph,x
+		bcs :+
+		lda jpg_csamph,x
+:		dex
+		bne :-
+		sta jpg_csamph									; store in +0
+
+		ldx #5
+		lda #00
+:		cmp jpg_csampv,x
+		bcs :+
+		lda jpg_csampv,x
+:		dex
+		bne :-
+		sta jpg_csampv
+		rts
+
+; ----------------------------------
+
+sof_get
+		lda jpg_headerlength+0
+		ora jpg_headerlength+1
+		beq sof_err2
+		jsr jpg_declen
+		jsr sdc_getbyte
+		bcc sof_end
+sof_err2
+		pla
+		pla
+
+sof_err
+		lda #jpg_readerr
+		sta jpg_error
+sof_end
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------

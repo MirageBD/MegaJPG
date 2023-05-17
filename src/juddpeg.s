@@ -53,15 +53,6 @@ crbuf		= imgbuf+$2600
 		jmp start
 		jmp idct2d
 
-start
-
-		jsr getapp0
-:loop	lda error
-		bne :err
-		jsr domarker
-		lda ateof
-		beq :loop
-
 ; bit patterns (masks)
 
 bitp	.byte $00
@@ -230,119 +221,7 @@ dht
 
 ; start of frame
 
-height	.word 0
-width	.word 0
-numrows	.byte 0
-numcols	.byte 0
-ncomps	.byte 0				; num components
-csampv	.byte 0,0,0,0,0,0	; sampling factors
-csamph	.byte 0,0,0,0,0,0	; (horizontal)
-cquant	.byte 0,0,0,0,0,0	; quantization table
 
-sof
-		ldx #5
-		lda #00
-:l1		sta csampv,x
-		sta csamph,x
-		dex
-		bpl :l1
-
-		jsr :get
-		cmp #8
-		beq :ok
-		lda #badqt
-		sta error
-		rts
-:ok
-		jsr :get
-		sta height+1
-		jsr :get
-		sta height
-		sec
-		sbc #1
-		sta numrows
-		lda height+1
-		sbc #00
-		lsr
-		ror numrows
-		lsr
-		ror numrows
-		lsr
-		ror numrows
-		inc numrows
-
-		jsr :get
-		sta width+1
-		jsr :get
-		sta width
-		sec
-		sbc #1				; 0..7 instead of 1..8
-		sta numcols
-		lda width+1
-		sbc #00
-		lsr
-		ror numcols
-		lsr
-		ror numcols
-		lsr
-		ror numcols
-		inc numcols			; 0..7 => 1 col, etc.
-
-		jsr :get
-		sta ncomps
-		sta temp
-:loop	jsr :get
-		sta temp+1			; id
-		jsr :get
-		ldx temp+1
-		pha
-		and #$0f
-		sta csampv,x
-		pla
-		lsr
-		lsr
-		lsr
-		lsr
-		sta csamph,x
-		jsr :get
-		ldx temp+1
-		sta cquant,x
-		dec temp
-		bne :loop
-
-		ldx #5				; find max sample
-		lda #00
-:l2		cmp csamph,x
-		bcs :c2
-		lda csamph,x
-:c2		dex
-		bne :l2
-		sta csamph			; store in +0
-
-		ldx #5
-		lda #00
-:l3		cmp csampv,x
-		bcs :c3
-		lda csampv,x
-:c3		dex
-		bne :l3
-		sta csampv
-
-		rts
-:get
-get
-		lda length
-		ora length+1
-		beq :err2
-		jsr declen
-		jsr getbyte
-		bcc :rts
-:err2	pla
-		pla
-
-:err	lda #readerr
-		sta error
-:rts	rts
 
 ; and finally -- start of scan!
 
