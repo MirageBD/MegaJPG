@@ -273,6 +273,17 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_mult2lo		$0c
 .define jpg_mult2hi		$0e
 
+.define jpg_dct			$10
+
+.define jpg_f0			jpg_dct+0
+.define jpg_f1			jpg_dct+2
+.define jpg_f2			jpg_dct+4
+.define jpg_f3			jpg_dct+6
+.define jpg_f4			jpg_dct+8
+.define jpg_f5			jpg_dct+10
+.define jpg_f6			jpg_dct+12
+.define jpg_f7			jpg_dct+14
+
 .define jpg_count		$f8							; used by getbits, addnode amd decodeac
 .define jpg_temp2		$f9							; used for huffman nodes
 .define jpg_huff		$fa							; huffman pointers
@@ -1169,6 +1180,207 @@ jpggbsrts
 jpg_getbits_zero
 		sta jpg_bitslo
 		sta jpg_bitshi
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+; since the algorithm is really an FFT converted into a DCT, the coefficients need a little massaging before tranformation.
+;
+; specifically,
+;     f(i) = s(i) / (2cos(i * pi / 16))      i = 0..7
+;        with
+;     f(0) = f(0) * 2 / sqrt(2)
+;
+;     which can be combined with the first step using the table for i=4.
+;
+; these multipliers can in part be incorporated in the quantization table, but for now they're out in the open.
+
+.define jpg_sec1	$3200
+.define jpg_sec2	$3400
+.define jpg_sec3	$3600
+.define jpg_sec4	$3800
+.define jpg_sec5	$3a00
+.define jpg_sec6	$3c00
+.define jpg_sec7	$3e00
+
+jpg_prepdat
+		ldx #00
+		lda #<jpg_sec4
+		sta jpg_point+0
+		lda #>jpg_sec4
+		sta jpg_point+1
+		lda jpg_f0+0
+		sta jpg_bitslo
+		lda jpg_f0+1
+		jsr jpg_pmult
+		sta jpg_f0+1
+		lda jpg_bitslo
+		sta jpg_f0+0
+
+		ldx #00
+		lda #<jpg_sec1
+		sta jpg_point+0
+		lda #>jpg_sec1
+		sta jpg_point+1
+		lda jpg_f1+0
+		sta jpg_bitslo
+		lda jpg_f1+1
+		jsr jpg_pmult
+		sta jpg_f1+1
+		lda jpg_bitslo
+		sta jpg_f1+0
+
+		ldx #00
+		lda #<jpg_sec2
+		sta jpg_point+0
+		lda #>jpg_sec2
+		sta jpg_point+1
+		lda jpg_f2+0
+		sta jpg_bitslo
+		lda jpg_f2+1
+		jsr jpg_pmult
+		sta jpg_f2+1
+		lda jpg_bitslo
+		sta jpg_f2+0
+
+		ldx #00
+		lda #<jpg_sec3
+		sta jpg_point+0
+		lda #>jpg_sec3
+		sta jpg_point+1
+		lda jpg_f3+0
+		sta jpg_bitslo
+		lda jpg_f3+1
+		jsr jpg_pmult
+		sta jpg_f3+1
+		lda jpg_bitslo
+		sta jpg_f3+0
+
+		ldx #00
+		lda #<jpg_sec4
+		sta jpg_point+0
+		lda #>jpg_sec4
+		sta jpg_point+1
+		lda jpg_f4+0
+		sta jpg_bitslo
+		lda jpg_f4+1
+		jsr jpg_pmult
+		sta jpg_f4+1
+		lda jpg_bitslo
+		sta jpg_f4+0
+
+		ldx #00
+		lda #<jpg_sec5
+		sta jpg_point+0
+		lda #>jpg_sec5
+		sta jpg_point+1
+		lda jpg_f5+0
+		sta jpg_bitslo
+		lda jpg_f5+1
+		jsr jpg_pmult
+		sta jpg_f5+1
+		lda jpg_bitslo
+		sta jpg_f5+0
+
+		ldx #00
+		lda #<jpg_sec6
+		sta jpg_point+0
+		lda #>jpg_sec6
+		sta jpg_point+1
+		lda jpg_f6+0
+		sta jpg_bitslo
+		lda jpg_f6+1
+		jsr jpg_pmult
+		sta jpg_f6+1
+		lda jpg_bitslo
+		sta jpg_f6+0
+
+		ldx #00
+		lda #<jpg_sec7
+		sta jpg_point+0
+		lda #>jpg_sec7
+		sta jpg_point+1
+		lda jpg_f7+0
+		sta jpg_bitslo
+		lda jpg_f7+1
+		jsr jpg_pmult
+		sta jpg_f7+1
+		lda jpg_bitslo
+		sta jpg_f7+0
+
+		rts
+
+jpg_pmult											; exit .a = bitshi
+		bmi jpg_pmult_neg
+		beq :++
+:		inx											; shift count
+		lsr
+		ror jpg_bitslo
+		cmp #00
+		bne :-
+:		sta jpg_bitshi
+		lda jpg_bitslo
+		asl
+		rol jpg_bitshi
+		adc jpg_point+0
+		sta jpg_point+0
+		lda jpg_bitshi
+		adc jpg_point+1
+		sta jpg_point+1
+		ldy #00
+		lda (jpg_point),y
+		sta jpg_bitslo
+		iny
+		lda (jpg_point),y
+		dex
+		bmi :++
+:		asl jpg_bitslo
+		rol
+		dex
+		bpl :-
+:		rts
+
+jpg_pmult_neg
+		sta jpg_bitshi
+		lda #00
+		sec
+		sbc jpg_bitslo
+		sta jpg_bitslo
+		lda #00
+		sbc jpg_bitshi
+		beq :++
+:		inx					; shift count
+		lsr
+		ror jpg_bitslo
+		cmp #00
+		bne :-
+:		asl jpg_bitslo
+		rol
+		sta jpg_bitshi
+		lda jpg_bitslo
+		adc jpg_point+0
+		sta jpg_point+0
+		lda jpg_bitshi
+		adc jpg_point+1
+		sta jpg_point+1
+		ldy #00
+		lda (jpg_point),y
+		sta jpg_bitslo
+		iny
+		lda (jpg_point),y
+		dex
+		bmi :++
+:		asl jpg_bitslo
+		rol
+		dex
+		bpl :-
+:		sta jpg_bitshi
+		lda #00
+		sec
+		sbc jpg_bitslo
+		sta jpg_bitslo
+		lda #00
+		sbc jpg_bitshi
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------

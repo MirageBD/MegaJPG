@@ -26,7 +26,6 @@ index		= $20			; idct stuff
 t1			= $22
 t2			= $24
 t3			= $26
-dct			= $10
 ;coeff		= $30
 
 crtab1		= $8400			; rgb conversion
@@ -49,29 +48,6 @@ crbuf		= imgbuf+$2600
 ; main header processing routines
 ;
 ;--------------------------------
-
-comment
-		jsr getbyte
-		bcs :rts
-		cmp #$0a			; lf
-		beq :oops2
-:c0		cmp #32
-		bcc :oops
-		cmp #128
-		bcc :c1
-:oops	lda #'@'
-		.byte $2c
-:oops2	lda #13
-:c1		cmp #65
-		bcc :c2
-		eor #32				; ->petscii
-:c2		jsr $ffd2
-		jsr declen
-		bne comment
-:rts	lda #13
-		jmp $ffd2
-
-
 
 
 ; and finally -- start of scan!
@@ -617,14 +593,6 @@ a4gh	= $2f00
 a5lo	= $3000				; cos(3a)
 a5hi	= $3100
 
-sec1	= $3200
-sec2	= $3400
-sec3	= $3600
-sec4	= $3800
-sec5	= $3a00
-sec6	= $3c00
-sec7	= $3e00
-
 a1216	= 46341			; a1 * 2^16
 a2216	= 35468			; a2 * 2^16
 a3216	= a1216
@@ -737,14 +705,6 @@ rows
 ;dct		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 ;coeff		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
-f0		= dct
-f1		= dct+2
-f2		= dct+4
-f3		= dct+6
-f4		= dct+8
-f5		= dct+10
-f6		= dct+12
-f7		= dct+14
 
 c0		= coeff
 c1		= coeff+2
@@ -1202,189 +1162,6 @@ idct
 		sta c7+1
 		rts					; sheeew!
 
-;
-; since the algorithm is really an fft converted into a dct, the coefficients need a little massaging before tranformation.
-; specifically, f(i) = s(i)/(2cos(i*pi/16)) i=0..7 with f(0)=f(0)*2/sqrt(2), which can be combined with the first step using the table for i=4.
-; these multipliers can in part be incorporated in the quantization table, but for now they're out in the open.
-;
 
-prepdat
-		ldx #00
-		lda #<sec4
-		sta point
-		lda #>sec4
-		sta point+1
-		lda f0
-		sta bitslo
-		lda f0+1
-		jsr pmult
-		sta f0+1
-		lda bitslo
-		sta f0
-
-		ldx #00
-		lda #<sec1
-		sta point
-		lda #>sec1
-		sta point+1
-		lda f1
-		sta bitslo
-		lda f1+1
-		jsr pmult
-		sta f1+1
-		lda bitslo
-		sta f1
-
-		ldx #00
-		lda #<sec2
-		sta point
-		lda #>sec2
-		sta point+1
-		lda f2
-		sta bitslo
-		lda f2+1
-		jsr pmult
-		sta f2+1
-		lda bitslo
-		sta f2
-
-		ldx #00
-		lda #<sec3
-		sta point
-		lda #>sec3
-		sta point+1
-		lda f3
-		sta bitslo
-		lda f3+1
-		jsr pmult
-		sta f3+1
-		lda bitslo
-		sta f3
-
-		ldx #00
-		lda #<sec4
-		sta point
-		lda #>sec4
-		sta point+1
-		lda f4
-		sta bitslo
-		lda f4+1
-		jsr pmult
-		sta f4+1
-		lda bitslo
-		sta f4
-
-		ldx #00
-		lda #<sec5
-		sta point
-		lda #>sec5
-		sta point+1
-		lda f5
-		sta bitslo
-		lda f5+1
-		jsr pmult
-		sta f5+1
-		lda bitslo
-		sta f5
-
-		ldx #00
-		lda #<sec6
-		sta point
-		lda #>sec6
-		sta point+1
-		lda f6
-		sta bitslo
-		lda f6+1
-		jsr pmult
-		sta f6+1
-		lda bitslo
-		sta f6
-
-		ldx #00
-		lda #<sec7
-		sta point
-		lda #>sec7
-		sta point+1
-		lda f7
-		sta bitslo
-		lda f7+1
-		jsr pmult
-		sta f7+1
-		lda bitslo
-		sta f7
-
-		rts
-
-pmult						; exit .a = bitshi
-		bmi :neg
-		beq :ok
-:l1		inx					; shift count
-		lsr
-		ror bitslo
-		cmp #00
-		bne :l1
-:ok		sta bitshi
-		lda bitslo
-		asl
-		rol bitshi
-		adc point
-		sta point
-		lda bitshi
-		adc point+1
-		sta point+1
-		ldy #00
-		lda (point),y
-		sta bitslo
-		iny
-		lda (point),y
-		dex
-		bmi :rts
-:l1b	asl bitslo
-		rol
-		dex
-		bpl :l1b
-:rts	rts
-
-:neg	sta bitshi
-		lda #00
-		sec
-		sbc bitslo
-		sta bitslo
-		lda #00
-		sbc bitshi
-		beq :ok2
-:l2		inx					; shift count
-		lsr
-		ror bitslo
-		cmp #00
-		bne :l2
-:ok2	asl bitslo
-		rol
-		sta bitshi
-		lda bitslo
-		adc point
-		sta point
-		lda bitshi
-		adc point+1
-		sta point+1
-		ldy #00
-		lda (point),y
-		sta bitslo
-		iny
-		lda (point),y
-		dex
-		bmi :rts2
-:l2b	asl bitslo
-		rol
-		dex
-		bpl :l2b
-:rts2	sta bitshi
-		lda #00
-		sec
-		sbc bitslo
-		sta bitslo
-		lda #00
-		sbc bitshi
-		rts
 
 */
