@@ -14,24 +14,12 @@ rendinit	= $2000
 render		= $2003
 display		= $2006
 
-
 quantp		= $fc			; quant table
-
-dest		= $04
 
 vsamp		= $28			; desample
 hsamp		= $29
 
-crtab1		= $8400			; rgb conversion
-crtab2		= $8480
-cbtab1		= $8500
-cbtab2		= $8580
 
-trans		= $8600			; transform
-
-ybuf		= imgbuf
-cbbuf		= imgbuf+$1300
-crbuf		= imgbuf+$2600
 
 		jmp start
 		jmp idct2d
@@ -420,156 +408,6 @@ desample
 		cmp #64
 		bne :newrow
 		rts
-
-;
-; convert to rgb
-;
-
-ypoint	= point
-cbpoint	= dest
-crpoint	= bitslo
-
-torgb
-		lda #<ybuf
-		sta ypoint
-		lda #>ybuf
-		sta ypoint+1
-		lda #<cbbuf
-		sta cbpoint
-		lda #>cbbuf
-		sta cbpoint+1
-		lda #<crbuf
-		sta crpoint
-		lda #>crbuf
-		sta crpoint+1
-
-		ldy #00
-		ldx ncomps
-		dex
-		bne :loop
-		ldx #>cbbuf-ybuf
-:l2		lda (ypoint),y
-		sta (cbpoint),y
-		sta (crpoint),y
-		iny
-		bne :l2
-		inc ypoint+1
-		inc cbpoint+1
-		inc crpoint+1
-		dex
-		bne :l2
-		rts
-
-:loop	lda #00
-		sta temp+1
-		lda (cbpoint),y
-		eor #$80
-		bpl :poscb
-:negcb	eor #$ff
-		clc
-		adc #01
-		tax
-		lda (ypoint),y
-		clc
-		adc cbtab1,x
-		sta temp
-		bcc :c1
-		inc temp+1			; high byte
-:c1		lda (ypoint),y
-		sec
-		sbc cbtab2,x
-		bcs :cont
-		lda #00				; underflow
-		beq :cont
-
-:poscb	tax
-		lda (ypoint),y
-		sec
-		sbc cbtab1,x
-		sta temp
-		bcs :c2
-		dec temp+1
-:c2		lda (ypoint),y
-		clc
-		adc cbtab2,x
-		bcc :cont
-		lda #255
-:cont	sta temp2
-
-		lda (crpoint),y
-		eor #$80
-		bpl :poscr
-:negcr	eor #$ff
-		clc
-		adc #01
-		tax
-		lda temp
-		clc
-		adc crtab2,x
-		sta temp
-		lda temp+1
-		adc #00
-		beq :c3
-		bpl :p1
-		lda #00
-		.byte $2c
-:p1		lda #255
-		.byte $2c
-:c3		lda temp
-		sta (cbpoint),y		; green
-		lda (ypoint),y
-		sec
-		sbc crtab1,x
-		bcs :done
-		lda #00
-		beq :done
-
-:poscr	tax
-		lda temp
-		sec
-		sbc crtab2,x
-		sta temp
-		lda temp+1
-		sbc #00
-		beq :c4
-		bpl :p2
-		lda #00
-		.byte $2c
-:p2		lda #255
-		.byte $2c
-:c4		lda temp
-		sta (cbpoint),y
-		lda (ypoint),y
-		clc
-		adc crtab1,x
-		bcc :done
-		lda #255
-:done	sta (ypoint),y		; red
-		lda temp2
-		sta (crpoint),y		; blue
-		iny
-		beq :inc
-:jmp	jmp :loop
-:inc	inc ypoint+1
-		inc cbpoint+1
-		inc crpoint+1
-		lda ypoint+1
-		cmp #>cbbuf
-		bcc :jmp
-		rts
-
-
-
-
-
-
-
-
-;-------------------------------
-;
-; idct routines
-;
-;-------------------------------
 
 
 

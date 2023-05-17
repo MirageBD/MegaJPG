@@ -265,6 +265,12 @@ jpg_skipff				.byte 0
 jpg_filepos				.byte 0, 0, 0				; can probably get rid of this
 jpg_reslen				.word 0						; lame restart markers
 
+.define jpg_ybuf		jpg_imgbuf
+.define jpg_cbbuf		jpg_imgbuf+$1300
+.define jpg_crbuf		jpg_imgbuf+$2600
+
+.define jpg_dest		$04
+
 .define jpg_bitslo		$06							; and dequantize
 .define jpg_bitshi		$07
 
@@ -289,8 +295,6 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_f6			jpg_dct+12
 .define jpg_f7			jpg_dct+14
 
-
-
 .define jpg_coeff		$02a7
 .define jpg_c0			jpg_coeff+0
 .define jpg_c1			jpg_coeff+2
@@ -311,6 +315,11 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_posmlo		$0b00						; mult tables
 .define jpg_negmhi		$0d00
 .define jpg_posmhi		$0e00						; 2 pages
+
+.define jpg_crtab1		$8400						; rgb conversion
+.define jpg_crtab2		$8480
+.define jpg_cbtab1		$8500
+.define jpg_cbtab2		$8580
 
 .define jpg_trans		$8600						; transform
 
@@ -1962,6 +1971,152 @@ ji2drcont
 		cpx #128
 		bcc ji2drloop
 
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+;
+; convert to rgb
+;
+
+.define jpg_ypoint		jpg_point
+.define jpg_cbpoint		jpg_dest
+.define jpg_crpoint		jpg_bitslo
+
+jpg_torgb
+		lda #<jpg_ybuf
+		sta jpg_ypoint
+		lda #>jpg_ybuf
+		sta jpg_ypoint+1
+		lda #<jpg_cbbuf
+		sta jpg_cbpoint
+		lda #>jpg_cbbuf
+		sta jpg_cbpoint+1
+		lda #<jpg_crbuf
+		sta jpg_crpoint
+		lda #>jpg_crbuf
+		sta jpg_crpoint+1
+
+		ldy #00
+		ldx jpg_ncomps
+		dex
+		bne jpg_torgb_loop
+		ldx #>(jpg_cbbuf-jpg_ybuf)
+:		lda (jpg_ypoint),y
+		sta (jpg_cbpoint),y
+		sta (jpg_crpoint),y
+		iny
+		bne :-
+		inc jpg_ypoint+1
+		inc jpg_cbpoint+1
+		inc jpg_crpoint+1
+		dex
+		bne :-
+		rts
+
+jpg_torgb_loop
+		lda #00
+		sta jpg_temp+1
+		lda (jpg_cbpoint),y
+		eor #$80
+		bpl jpg_torgb_poscb
+		eor #$ff ; negcb
+		clc
+		adc #01
+		tax
+		lda (jpg_ypoint),y
+		clc
+		adc jpg_cbtab1,x
+		sta jpg_temp+0
+		bcc :+
+		inc jpg_temp+1								; high byte
+:		lda (jpg_ypoint),y
+		sec
+		sbc jpg_cbtab2,x
+		bcs jpg_torgb_cont
+		lda #00										; underflow
+		beq jpg_torgb_cont
+
+jpg_torgb_poscb
+		tax
+		lda (jpg_ypoint),y
+		sec
+		sbc jpg_cbtab1,x
+		sta jpg_temp+0
+		bcs :+
+		dec jpg_temp+1
+:		lda (jpg_ypoint),y
+		clc
+		adc jpg_cbtab2,x
+		bcc jpg_torgb_cont
+		lda #255
+jpg_torgb_cont
+		sta jpg_temp2
+
+		lda (jpg_crpoint),y
+		eor #$80
+		bpl jpg_torgb_poscr
+		eor #$ff ; negcr
+		clc
+		adc #01
+		tax
+		lda jpg_temp+0
+		clc
+		adc jpg_crtab2,x
+		sta jpg_temp+0
+		lda jpg_temp+1
+		adc #00
+		beq :++
+		bpl :+
+		lda #00
+		.byte $2c
+:		lda #255
+		.byte $2c
+:		lda jpg_temp
+		sta (jpg_cbpoint),y							; green
+		lda (jpg_ypoint),y
+		sec
+		sbc jpg_crtab1,x
+		bcs jpg_torgb_done
+		lda #00
+		beq jpg_torgb_done
+
+jpg_torgb_poscr
+		tax
+		lda jpg_temp+0
+		sec
+		sbc jpg_crtab2,x
+		sta jpg_temp+0
+		lda jpg_temp+1
+		sbc #00
+		beq :++
+		bpl :+
+		lda #00
+		.byte $2c
+:		lda #255
+		.byte $2c
+:		lda jpg_temp
+		sta (jpg_cbpoint),y
+		lda (jpg_ypoint),y
+		clc
+		adc jpg_crtab1,x
+		bcc jpg_torgb_done
+		lda #255
+
+jpg_torgb_done
+		sta (jpg_ypoint),y							; red
+		lda jpg_temp2
+		sta (jpg_crpoint),y							; blue
+		iny
+		beq :++
+:		jmp jpg_torgb_loop
+
+:		inc jpg_ypoint+1
+		inc jpg_cbpoint+1
+		inc jpg_crpoint+1
+		lda jpg_ypoint+1
+		cmp #>jpg_cbbuf
+		bcc :--
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
