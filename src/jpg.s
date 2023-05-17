@@ -270,6 +270,8 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_mult2lo		$0c
 .define jpg_mult2hi		$0e
 
+.define jpg_temp2		$f9							; used for huffman nodes
+.define jpg_huff		$fa							; huffman pointers
 .define jpg_temp		$fe
 
 .define jpg_negmlo		$0a00						; $0A00 DATA BLOCK!!!
@@ -339,19 +341,6 @@ jpg_process
 jpg_err1
 		inc $d020
 		jmp *-3
-
-; ----------------------------------------------------------------------------------------------------------------------------------------
-
-.define jpg_huffmem		$1000						; huffman trees
-jpg_hufftop				.word 0						; end of huffman tree
-
-jpg_inithuff
-
-		lda #<jpg_huffmem
-		sta jpg_hufftop+0
-		lda #>jpg_huffmem
-		sta jpg_hufftop+1
-		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -512,8 +501,103 @@ jpg_marker_dqt_end
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
+jpg_huff_symbols	.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+jpg_hufflen			.byte 0
+
+
 jpg_marker_dht
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dht
+
+jpg_marker_dht_start
+		jsr jpg_declen
+		beq dhtjerr
+
+dhtgetb	jsr sdc_getbyte
+		bcc dhtcont
+dhtjerr	jmp jpg_marker_dht_error
+
+dhtcont
+		tay												; info byte
+		and #$0f
+		cmp #$04
+		bcs dhtjerr
+		asl
+		tax												; table num 0-3
+		tya
+		and #$f0
+		beq dht_ok										; dc table
+		cmp #$10
+		bne dhtjerr
+		txa												; ac table
+		ora #$08										; +8
+		tax
+
+dht_ok		
+		lda jpg_hufftop
+		sta jpg_dchuff0,x
+		sta jpg_huff
+		lda jpg_hufftop+1
+		sta jpg_dchuff0+1,x
+		sta jpg_huff+1
+		stx jpg_temp2
+		ldy #01											; right node
+		jsr jpg_newnode									; root node
+
+		ldx #01
+:		stx jpg_temp
+		lda jpg_headerlength+0
+		ora jpg_headerlength+1
+		beq jpg_marker_dht_error
+		jsr sdc_getbyte
+		bcs jpg_marker_dht_error
+		ldx jpg_temp
+		sta jpg_huff_symbols-1,x
+		jsr jpg_declen
+		inx
+		cpx #17
+		bne :-
+
+		lda #$ff
+		sta jpg_huffbits+0
+		sta jpg_huffbits+1
+		lda #1
+		sta jpg_hufflen
+
+dhtloop	inc jpg_huffbits+1									; hi,lo!
+		bne :+
+		inc jpg_huffbits
+
+:		ldx jpg_hufflen
+		dec jpg_huff_symbols-1,x
+		bpl :+
+		cpx #16
+		beq dhtnext
+		asl jpg_huffbits+1
+		rol jpg_huffbits
+		inc jpg_hufflen
+		bne :-
+
+:		ldx jpg_temp2
+		lda jpg_dchuff0,x
+		sta jpg_huff
+		lda jpg_dchuff0+1,x
+		sta jpg_huff+1
+		jsr sdc_getbyte
+		bcs jpg_marker_dht_error
+		ldx jpg_hufflen
+		jsr jpg_addnode
+		bcs jpg_marker_dht_end
+		jsr jpg_declen
+		jmp dhtloop
+dhtnext	jsr jpg_declen
+		beq jpg_marker_dht_end
+		jmp dhtgetb										; multiple hts
+
+jpg_marker_dht_error
+		lda #jpg_badht
+		sta jpg_error
+
+jpg_marker_dht_end		
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
@@ -706,6 +790,160 @@ jpg_getheader_error
 
 jpg_getheader_end
 
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+; huffman tree routines.
+;
+; the huffman tree is implemented as a series of 2-byte nodes.
+; left nodes are at huff+2
+; right nodes are at (huff) if link < $8000.
+
+; link   = $80xx means xx=leaf value,
+; link   = $ffxx means no right link,
+; link+2 = hufftop -> no left link.
+
+.define jpg_huffmem		$1000						; huffman trees
+
+jpg_dchuff0		.word 0								; addresses
+jpg_dchuff1		.word 0
+jpg_dchuff2		.word 0
+jpg_dchuff3		.word 0
+jpg_achuff0		.word 0
+jpg_achuff1		.word 0
+jpg_achuff2		.word 0
+jpg_achuff3		.word 0
+
+jpg_hufftop		.word 0								; end of huffman tree
+jpg_hufftx		.byte 0
+jpg_huffty		.byte 0
+
+jpg_huffbits	.word 0								; hi,lo
+jpg_huffval		.byte 0
+
+jpg_bitp		.byte $00									; bit patterns (masks)
+				.byte $01, $02, $04,$08, $10, $20, $40, $80
+				.byte $01, $02, $04,$08, $10, $20, $40, $80
+				.byte "-wyn-"
+
+jpg_inithuff
+
+		lda #<jpg_huffmem
+		sta jpg_hufftop+0
+		lda #>jpg_huffmem
+		sta jpg_hufftop+1
+		rts
+
+; create new node; make current node
+; point to it.
+;
+; on entry: .y = 0 -> right node, otherwise left node
+
+jpg_newnode
+		sty jpg_huffty
+		stx jpg_hufftx
+
+		tya
+		bne jpg_nnskip
+		lda jpg_hufftop
+		sec
+		sbc jpg_huff+0
+		sta (jpg_huff),y							; point -> new node
+		iny
+		lda jpg_hufftop+1
+		sbc jpg_huff+1
+		sta (jpg_huff),y
+
+jpg_nnskip
+		lda jpg_hufftop
+		sta jpg_point+0
+		clc
+		adc #2
+		sta jpg_hufftop
+		lda jpg_hufftop+1
+		sta jpg_point+1
+		adc #00
+		sta jpg_hufftop+1
+
+		ldy #01
+		lda #$ff
+		sta (jpg_point),y							; init new node
+
+		ldx jpg_hufftx
+		ldy jpg_huffty
+		clc
+		rts
+
+;:err	lda #badht
+;		sta error
+;		sec
+;		rts
+
+; add a new node; .x = length
+; (huff) -> tree root
+
+jpg_addnode
+		sta jpg_huffval
+
+jpg_anloop
+
+		ldy #1
+		cpx #9
+		bcc :+
+		dey
+:		lda jpg_bitp,x
+		and jpg_huffbits,y
+		bne jpg_anright
+
+jpg_anleft
+		lda jpg_huff								; check if at end
+		clc
+		adc #2
+		pha
+		tay
+		lda jpg_huff+1
+		adc #00
+		pha
+		cpy jpg_hufftop
+		sbc jpg_hufftop+1
+		bcc :+										; not a new node
+		ldy #$80									; create left node
+		jsr jpg_newnode
+:		pla
+		sta jpg_huff+1
+		pla
+		sta jpg_huff
+		jmp jpgancontinue
+
+jpg_anright
+		ldy #1
+		lda (jpg_huff),y							; check for rt ptr
+		bpl :+
+		dey											; .y=0 -> rt node
+		jsr jpg_newnode
+:		ldy #00
+		lda (jpg_huff),y
+		clc
+		adc jpg_huff
+		pha
+		iny
+		lda (jpg_huff),y
+		adc jpg_huff+1
+		sta jpg_huff+1
+		pla
+		sta jpg_huff
+
+jpgancontinue
+		dex
+		bne jpg_anloop
+		lda #$80
+		ldy #01
+		sta (jpg_huff),y							; store value
+		lda jpg_huffval
+		dey
+		sta (jpg_huff),y							; $80xx
+		clc
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------

@@ -16,8 +16,6 @@ display		= $2006
 
 
 quantp		= $fc			; quant table
-huff		= $fa			; huffman pointers
-temp2		= $f9
 count		= $f8			; used by getbits
 							; and addnode
 
@@ -53,14 +51,6 @@ crbuf		= imgbuf+$2600
 		jmp start
 		jmp idct2d
 
-; bit patterns (masks)
-
-bitp	.byte $00
-		.byte $01, $02, $04,$08, $10, $20, $40, $80
-		.byte $01, $02, $04,$08, $10, $20, $40, $80
-
-;		txt 'wyn wuz here'
-		.byte "-wyn-"
 
 ;--------------------------------
 ;
@@ -131,95 +121,6 @@ restart
 
 ; define huffman table
 
-symbols	.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-hufflen	.byte 0
-
-dht
-		jsr declen
-		beq :jerr
-:getb	jsr getbyte
-		bcc :cont
-:jerr	jmp :err
-:cont
-		tay					; info byte
-		and #$0f
-		cmp #$04
-		bcs :jerr
-		asl
-		tax					; table num 0-3
-		tya
-		and #$f0
-		beq :ok				; dc table
-		cmp #$10
-		bne :jerr
-		txa					; ac table
-		ora #$08			; +8
-		tax
-:ok		lda hufftop
-		sta dchuff0,x
-		sta huff
-		lda hufftop+1
-		sta dchuff0+1,x
-		sta huff+1
-		stx temp2
-		ldy #01				; right node
-		jsr newnode			; root node
-
-		ldx #01
-:l1		stx temp
-		lda length
-		ora length+1
-		beq :err
-		jsr getbyte
-		bcs :err
-		ldx temp
-		sta symbols-1,x
-		jsr declen
-		inx
-		cpx #17
-		bne :l1
-
-		lda #$ff
-		sta huffbits
-		sta huffbits+1
-		lda #1
-		sta hufflen
-:loop
-		inc huffbits+1		; hi,lo!
-		bne :c1
-		inc huffbits
-:c1
-:l2		ldx hufflen
-		dec symbols-1,x
-		bpl :c2
-		cpx #16
-		beq :next
-		asl huffbits+1
-		rol huffbits
-		inc hufflen
-		bne :l2
-:c2
-		ldx temp2
-		lda dchuff0,x
-		sta huff
-		lda dchuff0+1,x
-		sta huff+1
-		jsr getbyte
-		bcs :err
-		ldx hufflen
-		jsr addnode
-		bcs :rts
-		jsr declen
-		jmp :loop
-:next	jsr declen
-		beq :rts
-		jmp :getb			; multiple hts
-
-:err	lda #badht
-		sta error
-:rts	rts
-
-; start of frame
 
 
 
@@ -865,146 +766,8 @@ getbits
 		sta bitshi
 		rts
 
-;
-; huffman tree routines.
-;
-; the huffman tree is implemented as
-; a series of 2-byte nodes.  left
-; nodes are at huff+2, right nodes
-; are at (huff) if link < $8000.
-; link = $80xx means xx=leaf value,
-; link = $ffxx means no right link,
-; link+2 = hufftop -> no left link.
-;
 
-dchuff0		.word 00				; addresses
-dchuff1		.word 00
-dchuff2		.word 00
-dchuff3		.word 00
-achuff0		.word 00
-achuff1		.word 00
-achuff2		.word 00
-achuff3		.word 00
 
-hufftop		.word 00				; end of huffman tree
-ty			.byte 0
-tx			.byte 0
-
-inithuff 
-		lda #<huffmem
-		sta hufftop
-		lda #>huffmem
-		sta hufftop+1
-		rts
-
-; create new node; make current node
-; point to it.
-;
-; on entry: .y = 0 -> right node,
-;            otherwise left node
-
-newnode
-		sty ty
-		stx tx
-
-		tya
-		bne :skip
-		lda hufftop
-		sec
-		sbc huff
-		sta (huff),y		; point -> new node
-		iny
-		lda hufftop+1
-		sbc huff+1
-		sta (huff),y
-:skip
-		lda hufftop
-		sta point
-		clc
-		adc #2
-		sta hufftop
-		lda hufftop+1
-		sta point+1
-		adc #00
-		sta hufftop+1
-
-		ldy #01
-		lda #$ff
-		sta (point),y		; init new node
-
-		ldy ty
-		ldx tx
-		clc
-		rts
-
-;:err	lda #badht
-;		sta error
-;		sec
-;		rts
-
-; add a new node; .x = length
-; (huff) -> tree root
-
-huffbits	.word 0				; hi,lo
-huffval		.byte 0
-
-addnode
-		sta huffval
-:loop
-		ldy #1
-		cpx #9
-		bcc :c1
-		dey
-:c1		lda bitp,x
-		and huffbits,y
-		bne :right
-
-:left	lda huff			; check if at end
-		clc
-		adc #2
-		pha
-		tay
-		lda huff+1
-		adc #00
-		pha
-		cpy hufftop
-		sbc hufftop+1
-		bcc :skip1			; not a new node
-		ldy #$80			; create left node
-		jsr newnode
-:skip1	pla
-		sta huff+1
-		pla
-		sta huff
-		jmp :dex
-
-:right	ldy #1
-		lda (huff),y		; check for rt ptr
-		bpl :skip2
-		dey					; .y=0 -> rt node
-		jsr newnode
-:skip2	ldy #00
-		lda (huff),y
-		clc
-		adc huff
-		pha
-		iny
-		lda (huff),y
-		adc huff+1
-		sta huff+1
-		pla
-		sta huff
-
-:dex	dex
-		bne :loop
-		lda #$80
-		ldy #01
-		sta (huff),y		; store value
-		lda huffval
-		dey
-		sta (huff),y		; $80xx
-		clc
-		rts
 
 ;
 ; gethuff -- get valid huffman code
