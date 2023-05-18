@@ -1,7 +1,7 @@
 ; ----------------------------------------------------------------------------------------------------
 
-.define sdc_transferbuffer	$0900
-.define sdc_sectorbuffer	$0a00
+.define sdc_transferbuffer	$0800
+.define sdc_sectorbuffer	$8000
 
 sdc_bytecounterlo	.byte 0
 sdc_bytecounterhi	.byte 0
@@ -272,21 +272,6 @@ sdcgb	lda $babe
 
 		clc
 
-		rts
-
-; ----------------------------------------------------------------------------------------------------
-
-sdc_nbits	.byte 0				; # of bits left
-sdc_byte	.byte 0
-
-sdc_getbit
-		dec sdc_nbits
-		bpl :+
-		lda #7
-		sta sdc_nbits
-		jsr sdc_getbyte
-		sta sdc_byte
-:		asl sdc_byte
 		rts
 
 ; ----------------------------------------------------------------------------------------------------

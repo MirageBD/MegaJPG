@@ -12,6 +12,8 @@
 .define uichars					$10000	; $10000 - $14000     size = $4000
 .define glchars					$14000	; $14000 - $1d000     size = $9000
 
+.define jpgdata					$20000
+
 ; ----------------------------------------------------------------------------------------------------
 
 .segment "MAIN"
@@ -140,7 +142,7 @@ entry_main
 		FLOPPY_FAST_LOAD kbsprites,			$30, $34
 		FLOPPY_FAST_LOAD spritepal,			$30, $35
 		FLOPPY_FAST_LOAD $0400,				$30, $36		; jpg_negmlo
-		FLOPPY_FAST_LOAD $0900,				$30, $37		; jpg_negmlo
+		FLOPPY_FAST_LOAD $0900,				$30, $37
 		jsr fl_exit
 
 		sei

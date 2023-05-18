@@ -265,16 +265,27 @@ jpg_skipff				.byte 0
 jpg_filepos				.byte 0, 0, 0				; can probably get rid of this
 jpg_reslen				.word 0						; lame restart markers
 
+; ang = PI/8;
+; a1 = cos(2 * ang)					= cos(0.250 * PI)					= 0.7071067811865 * 65536			= 46340.95001184158
+; a2 = cos(    ang) - cos(3 * ang)	= cos(0.125 * PI) - cos(0.375 * PI)	= 0.5411961001462 * 65536			= 35467.82761918116
+; a3 = cos(2 * ang)					= cos(0.250 * PI)					= 0.7071067811865 * 65536			= 46340.95001184158
+; a4 = cos(    ang) + cos(3 * ang)	= cos(0.125 * PI) + cos(0.375 * PI)	= 1.3065629648763 * 65536 - 65536	= 20090.910466138215
+; a5 = cos(3 * ang)					= cos(0.375 * PI)					= 0.3826834323650 * 65536			= 25079.541423478528
+
+.define jpg_a1216		46341
+.define jpg_a2216		35468
+.define jpg_a3216		jpg_a1216
+.define jpg_a4216		20091
+.define jpg_a5216		25080
+
+; f = { 10, 9.24, 7.07, 3.826, 0, -3.826, -7.07, -9.24 }
+; F = {  0,    0,    0,     0, 0,      0,     0,   256 }
+; S = {  0,    0,    0,     0, 0,      0,     0,   256 }
+
 .define jpg_negmlo		$0400						; $0A00-$1000 DATA BLOCK!!!
 .define jpg_posmlo		$0500						; mult tables
 .define jpg_negmhi		$0600
 .define jpg_posmhi		$0700						; 2 pages
-
-.define jpg_a1216		46341						; a1 * 2^16
-.define jpg_a2216		35468						; a2 * 2^16
-.define jpg_a3216		jpg_a1216
-.define jpg_a4216		20091						; ...
-.define jpg_a5216		25080
 
 /*
 .define jpg_a1lo		$2900						; cos(2a), a=pi/8
@@ -298,26 +309,34 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_sec7		$3e00						; ends $4000
 */
 
-.define jpg_a1lo		$0900						; cos(2a), a=pi/8
-.define jpg_a1hi		$0a00
-.define jpg_a2lo		$0b00						; cos(a) - cos(3a)
-.define jpg_a2hi		$0c00
+.define jpg_a1lo		$0900	; $0000				; cos(2a), a=pi/8
+.define jpg_a1hi		$0a00	; $0100
+
+.define jpg_a2lo		$0b00	; $0200				; cos(a) - cos(3a)
+.define jpg_a2hi		$0c00	; $0300
+
 .define jpg_a3lo		jpg_a1lo					; cos(2a)
 .define jpg_a3hi		jpg_a1hi
-.define jpg_a4lo		$0d00						; cos(a) + cos(3a)
-.define jpg_a4hi		$0e00
-.define jpg_a4gh		$0f00
-.define jpg_a5lo		$1000						; cos(3a)
-.define jpg_a5hi		$1100
 
-.define jpg_sec1		$1200
+.define jpg_a4lo		$0d00	; $0400				; cos(a) + cos(3a)
+.define jpg_a4hi		$0e00	; $0500
+.define jpg_a4gh		$0f00	; $0600
+
+.define jpg_a5lo		$1000	; $0700				; cos(3a)
+.define jpg_a5hi		$1100	; $0800
+
+; since the algorithm is really an FFT converted into a DCT, the coefficients need a little massaging before tranformation.
+;     f(i) = s(i) / (2cos(i * pi / 16))      i = 0..7
+;        with
+;     f(0) = f(0) * 2 / sqrt(2)
+
+.define jpg_sec1		$1200	; $0900
 .define jpg_sec2		$1400
 .define jpg_sec3		$1600
 .define jpg_sec4		$1800
 .define jpg_sec5		$1a00
 .define jpg_sec6		$1c00
 .define jpg_sec7		$1e00						; ends $4000
-
 
 .define jpg_crtab1		$8400						; rgb conversion
 .define jpg_crtab2		$8480
@@ -329,8 +348,11 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_veclo		$8680						; vec to be quantized
 .define jpg_vechi		$86c0
 
-.define jpg_imgbuf		$8700						; image data buffer $8700-$c000
+.define jpg_imgbuf		$8700						; image data buffer $8700+3*$1300=$c000
 .define jpg_imgbufsize	$3900
+
+.define jpg_huffmem		$c000						; huffman trees ($c000-$c570)
+
 
 .define jpg_ybuf		jpg_imgbuf+$0000			; $8700
 .define jpg_cbbuf		jpg_imgbuf+$1300			; $9a00
@@ -366,7 +388,7 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_hsamp		$29
 
 
-.define jpg_coeff		$02a7
+.define jpg_coeff		$02a7						; 8 coefficients
 .define jpg_c0			jpg_coeff+0
 .define jpg_c1			jpg_coeff+2
 .define jpg_c2			jpg_coeff+4
@@ -444,15 +466,20 @@ jpg_process
 		rts
 
 jpg_err1
-		inc $d020
-		jmp *-3
+		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_draw
+
+		lda #$a0
+		sta $d020
+		lda #$e0
+		sta $d020
+		jmp jpg_err1
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
 jpg_initbuff
 
 		lda #<jpg_imgbuf
-		sta jpg_point
+		sta jpg_point+0
 		lda #>jpg_imgbuf
 		sta jpg_point+1
 		ldx #>jpg_imgbufsize
@@ -469,6 +496,41 @@ jpgibloop
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
+jpg_getbyte
+
+		jsr sdc_getbyte
+		sta jpg_header+0
+		cmp #$ff
+		bne :+
+		ldx jpg_skipff
+		beq :+
+		jsr sdc_getbyte
+		sta jpg_header+1
+		cmp #$ff
+		beq jpg_getbyte								;$ffff -> skip
+		cmp #00										;$ff00 -> $ff
+		bne :+
+		lda #$ff
+:		;ldx $90
+		;stx jpg_eof
+		;cpx #64
+		rts											; C set -> error
+
+jpg_nbits	.byte 0           ;# of bits left
+jpg_byte	.byte 0
+
+jpg_getbit
+		dec jpg_nbits
+		bpl :+
+		lda #7
+		sta jpg_nbits
+		jsr jpg_getbyte
+		sta jpg_byte
+:		asl jpg_byte
+		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
 jpg_getapp0											; read jfif header
 
 		jsr jpg_getheader
@@ -481,7 +543,7 @@ jpg_getapp0											; read jfif header
 :		jmp jpg_domarker							; doesn't hit?
 
 jpg_ignoresegment									; ignore rest of segment
-		jsr sdc_getbyte
+		jsr jpg_getbyte
 		bcs :+
 		lda jpg_eof
 		bne :+
@@ -491,10 +553,7 @@ jpg_ignoresegment									; ignore rest of segment
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
-;
-; domarker -- read marker and call
-;   appropriate routine.
-;
+; domarker -- read marker and call appropriate routine.
 
 jpg_marker_unknown
 		jsr jpg_ignoresegment
@@ -546,15 +605,12 @@ jpg_marker_sos
 		jsr jpg_rendinit
 		; -------------------------------
 
-		jsr sdc_getbyte
-
+		jsr sof_get									; LV TODO - BETTER NAMING
 		sta jpg_temp								; # of components
 		sta jpg_ncomps
-
-:		jsr sdc_getbyte
+:		jsr sof_get									; LV TODO - BETTER NAMING
 		sta jpg_temp+1								; component id    01 00     02 11     03 11
-
-		jsr sdc_getbyte
+		jsr sof_get									; LV TODO - BETTER NAMING
 		ldx jpg_temp+1
 
 		pha
@@ -568,43 +624,44 @@ jpg_marker_sos
 		sta jpg_dchuff,x
 		dec jpg_temp
 		bne :-
-		jsr sdc_getbyte								; scan parameters		00
-		jsr sdc_getbyte								; (progressive)			3F
-		jsr sdc_getbyte								; (ignore)				00
+		jsr sof_get									; scan parameters		00
+		jsr sof_get									; (progressive)			3F
+		jsr sof_get									; (ignore)				00
 
 ; image data begins here							$02BB in pup.jpg file
 
 		lda #00
 		sta jpg_row
 		sta jpg_col
-		jsr restart
+		jsr jpg_restartdecoder
 
 jpg_sos_ready
 
 		inc $d020
 
 		ldx #1										; luma/intensity
-		lda #<jpg_ybuf
-		ldy #>jpg_ybuf
+		lda #<(jpg_ybuf)
+		ldy #>(jpg_ybuf)
 		jsr jpg_readdataunit
 
 		ldx jpg_ncomps
 		dex
 		beq jpg_sos_readdone
 		ldx #2										; read chroma
-		lda #<jpg_cbbuf
-		ldy #>jpg_cbbuf
+		lda #<(jpg_cbbuf)
+		ldy #>(jpg_cbbuf)
 		jsr jpg_readdataunit
 
 		ldx jpg_ncomps
 		dex
 		beq jpg_sos_readdone
 		ldx #3										; read chroma
-		lda #<jpg_crbuf
-		ldy #>jpg_crbuf
+		lda #<(jpg_crbuf)
+		ldy #>(jpg_crbuf)
 		jsr jpg_readdataunit
 
 jpg_sos_readdone
+
 		jsr decres
 
 		lda jpg_eof
@@ -616,7 +673,7 @@ jpg_sos_readdone
 		cmp jpg_numcols
 		bcc jpg_sos_ready
 
-		jsr jpg_torgb
+		;jsr jpg_torgb
 
 		lda #00
 		sta jpg_col
@@ -625,9 +682,6 @@ jpg_sos_readdone
 		ldy #>jpg_imgbuf
 		ldx jpg_csampv
 		stx jpg_temp2
-
-		;inc $d020
-		;jmp *-3
 
 jpg_sos_rend
 		sta jpg_temp+0
@@ -694,14 +748,16 @@ decres	lda jpg_reslen+1
 		beq :++
 		dec jpg_cres+1
 :		rts
-:		sta sdc_nbits								; skip bits
-		jsr sdc_getbyte								; read $ffxx
+
+:		sta jpg_nbits								; skip bits
+		jsr jpg_getbyte								; read $ffxx
 		lda jpg_reslen+0
 		sta jpg_cres+0
 		lda jpg_reslen+1
 		sta jpg_cres+1
 
-restart	ldx #5
+jpg_restartdecoder
+		ldx #5
 :		sta jpg_dclo,x
 		sta jpg_dchi,x
 		dex
@@ -716,7 +772,8 @@ jpg_marker_dqt
 jpg_marker_dqt_start
 		jsr jpg_declen
 		beq jpg_marker_dqt_end
-		jsr sdc_getbyte
+		jsr jpg_getbyte
+
 		bcs jpg_marker_dqt_err
 		tay
 		and #$0f									; number of qt
@@ -745,11 +802,12 @@ dqt_loop
 		lda jpg_headerlength+0
 		ora jpg_headerlength+1
 		beq jpg_marker_dqt_err
-		jsr sdc_getbyte
+		jsr jpg_getbyte
 		bcs jpg_marker_dqt_err
 		ldy jpg_temp
 		sta (jpg_point),y
 		jsr jpg_declen
+
 		iny
 		cpy #64
 		bne dqt_loop
@@ -775,7 +833,7 @@ jpg_marker_dht_start
 		jsr jpg_declen
 		beq dhtjerr
 
-dhtgetb	jsr sdc_getbyte
+dhtgetb	jsr jpg_getbyte
 		bcc dhtcont
 dhtjerr	jmp jpg_marker_dht_error
 
@@ -811,7 +869,7 @@ dht_ok
 		lda jpg_headerlength+0
 		ora jpg_headerlength+1
 		beq jpg_marker_dht_error
-		jsr sdc_getbyte
+		jsr jpg_getbyte
 		bcs jpg_marker_dht_error
 		ldx jpg_temp
 		sta jpg_huff_symbols-1,x
@@ -845,7 +903,7 @@ dhtloop	inc jpg_huffbits+1							; hi,lo!
 		sta jpg_huff+0
 		lda jpg_dchuff0+1,x
 		sta jpg_huff+1
-		jsr sdc_getbyte
+		jsr jpg_getbyte
 		bcs jpg_marker_dht_error
 		ldx jpg_hufflen
 		jsr jpg_addnode
@@ -929,12 +987,11 @@ sof_ok	jsr sof_get									; get height - $00e8
 		jsr sof_get									; get components - 3
 		sta jpg_ncomps
 		sta jpg_temp+0
-sof_loop
 
+sof_loop
 		; 01 22 00 Y
 		; 02 11 01 Cb
 		; 03 11 01 Cr
-
 		jsr sof_get									; read component ID
 		sta jpg_temp+1								;
 		jsr sof_get									; read 22, 11, 11
@@ -989,7 +1046,7 @@ sof_get
 		ora jpg_headerlength+1
 		beq sof_err2
 		jsr jpg_declen
-		jsr sdc_getbyte
+		jsr jpg_getbyte
 		bcc sof_end
 sof_err2
 		pla
@@ -1025,18 +1082,19 @@ jpg_headerlength	.word 0							; lo, hi
 ;   z set -> end of file
 
 jpg_getheader
-		;UICORE_SETLISTBOXTEXT la1listbox, uitxt_jpgheader
+		UICORE_SETLISTBOXTEXT la1listbox, uitxt_jpgheader
 
 		lda #00
 		sta jpg_header+0
 		sta jpg_header+1
 
-		jsr sdc_getbyte
+		jsr jpg_getbyte
 		cmp #$ff									; expect to find $ff marker
 		bne jpg_getheader_error
 
-		jsr sdc_getbyte
+		jsr jpg_getbyte
 		sta jpg_header+1
+
 		cmp #$d8									; start of jpeg
 		beq jpg_getheader_ok						; lame photoshop
 		cmp #$d9									; end of file
@@ -1044,14 +1102,15 @@ jpg_getheader
 		sta jpg_eof
 		beq jpg_getheader_ok
 
-:		jsr sdc_getbyte								; get high byte of length
+:		jsr jpg_getbyte								; get high byte of length
 		bcs jpg_getheader_end
 		sta jpg_headerlength+1
-		jsr sdc_getbyte								; get lo byte of length
+		jsr jpg_getbyte								; get lo byte of length
 		bcs jpg_getheader_end
 		sec
 		sbc #2
 		sta jpg_headerlength+0						; subtract 2 from length (to get rid of first two bytes included in the length)
+
 		bcs :+
 		dec jpg_headerlength+1
 :		ora jpg_headerlength+1						; empty segment
@@ -1066,7 +1125,6 @@ jpg_getheader_error
 		;fallthrough
 
 jpg_getheader_end
-
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
@@ -1080,8 +1138,6 @@ jpg_getheader_end
 ; link   = $80xx means xx=leaf value,
 ; link   = $ffxx means no right link,
 ; link+2 = hufftop -> no left link.
-
-.define jpg_huffmem		$1000						; huffman trees
 
 jpg_dchuff0		.word 0								; addresses
 jpg_dchuff1		.word 0
@@ -1102,7 +1158,6 @@ jpg_huffval		.byte 0
 jpg_bitp		.byte $00									; bit patterns (masks)
 				.byte $01, $02, $04,$08, $10, $20, $40, $80
 				.byte $01, $02, $04,$08, $10, $20, $40, $80
-				.byte "-wyn-"
 
 jpg_inithuff
 
@@ -1240,7 +1295,9 @@ jpg_decodedc
 		jsr jpg_gethuff								; get category
 		ldx jpg_error
 		bne :+
+
 		jsr jpg_getbits								; get the bits
+
 		ldx jpg_curcomp
 		lda jpg_bitslo
 		clc
@@ -1328,7 +1385,7 @@ jpg_gethuff
 		cmp #$80
 		beq jpgghfound
 
-		jsr sdc_getbit
+		jsr jpg_getbit
 		bcs jpgghright
 		lda jpg_huff+0
 		adc #2										; c clear
@@ -1364,6 +1421,9 @@ jpgghfound
 		rts
 
 jpg_gethuff_error
+		inc $d020
+		jmp *-3
+
 		lda #jpg_hufferr
 		sta jpg_error
 		rts
@@ -1375,10 +1435,11 @@ jpg_gethuff_error
 jpg_sign	.byte 0
 
 jpg_getbits
+
 		sta jpg_count
 		tax
 		beq jpg_getbits_zero
-		jsr sdc_getbit
+		jsr jpg_getbit
 		lda #00
 		bcs :+
 		lda #$ff									; 0-> negative
@@ -1389,7 +1450,7 @@ jpg_getbits
 		dec jpg_count
 		beq jpggbsdone
 jpggbsloop
-		jsr sdc_getbit
+		jsr jpg_getbit
 		rol jpg_bitslo
 		rol jpg_bitshi
 		dec jpg_count
@@ -1608,6 +1669,86 @@ jpg_pmult_neg
 ;
 ; input: dct coeffs contained in flo/fhi
 ; output: original coeffs in coeffs
+
+/*
+	void calcIdct()
+	{
+		double t1, t2, t3, t4;
+
+		// Stage 1
+
+		for (int i=0; i<8; i++)
+		{
+			F[i] = S[i] / (2.0 * Math.cos(i * ang/2));
+		}
+
+		F[0] = F[0]*2 / Math.sqrt(2.0);
+
+		t1   =  F[5] - F[3];
+		t2   =  F[1] + F[7];
+		t3   =  F[1] - F[7];
+		t4   =  F[5] + F[3];
+		F[5] =  t1;
+		F[1] =  t2;
+		F[7] =  t3;
+		F[3] =  t4;
+
+		// Stage 2
+
+		t1   =  F[2] - F[6];
+		t2   =  F[2] + F[6];
+		F[2] =  t1;
+		F[6] =  t2;
+		t1   =  F[1] - F[3];
+		t2   =  F[1] + F[3];
+		F[1] =  t1;
+		F[3] =  t2;
+
+		// Stage 3
+
+		F[2] =  a1*F[2];
+		t1   = -a5*(F[5] + F[7]);
+		F[5] = -a2*F[5] + t1;
+		F[1] =  a3*F[1];
+		F[7] =  a4*F[7] + t1;
+
+		// Stage 4
+
+		t1   =  F[0] + F[4];
+		t2   =  F[0] - F[4];
+		F[0] =  t1;
+		F[4] =  t2;
+		F[6] =  F[2] + F[6];
+
+		// Stage 5
+
+		t1   =  F[0] + F[6];
+		t2   =  F[2] + F[4];
+		t3   =  F[4] - F[2];
+		t4   =  F[0] - F[6];
+		F[0] =  t1;
+		F[4] =  t2;
+		F[2] =  t3;
+		F[6] =  t4;
+
+		F[3] =  F[3] + F[7];
+		F[7] =  F[7] + F[1];
+		F[1] =  F[1] - F[5];
+		F[5] = -F[5];
+
+		// Final stage
+
+		f[0] = (F[0] + F[3]);
+		f[1] = (F[4] + F[7]);
+		f[2] = (F[2] + F[1]);
+		f[3] = (F[6] + F[5]);
+
+		f[4] = (F[6] - F[5]);
+		f[5] = (F[2] - F[1]);
+		f[6] = (F[4] - F[7]);
+		f[7] = (F[0] - F[3]);
+	}
+*/
 
 jpg_idct
 		jsr jpg_prepdat								; shift and such
@@ -2286,7 +2427,7 @@ jpg_torgb_done
 		inc jpg_cbpoint+1
 		inc jpg_crpoint+1
 		lda jpg_ypoint+1
-		cmp #>jpg_cbbuf
+		cmp #>(jpg_cbbuf)
 		bcc :--
 		rts
 
@@ -2321,10 +2462,10 @@ jpg_desample_expand
 		dec jpg_count
 		bne :-
 
-		lda jpg_dest								; next scanline
+		lda jpg_dest+0								; next scanline
 		clc
 		adc jpg_linelen
-		sta jpg_dest
+		sta jpg_dest+0
 		lda jpg_dest+1
 		adc jpg_linelen+1
 		sta jpg_dest+1
@@ -2440,6 +2581,7 @@ jpg_fetch											; fetch the data
 		lda jpg_curbuf+1
 		adc jpg_dest+1
 		sta jpg_dest+1
+
 :decode
 		jsr jpg_decodedc
 		lda jpg_error
