@@ -26,11 +26,15 @@ jpg_rendinit
 
 		DMA_RUN_JOB clearcolorramjob
 
+		lda #$00
+		sta screencolumn
+		sta screenrow
+
 		ldx #<(jpgdata/64)								; char to plot
 		ldy #>(jpgdata/64)
 
-put0	stx screen+0									; plot char low byte
-put1	sty screen+1									; plot char high byte
+put0	stx screen+0									; plot left of 2 chars
+put1	sty screen+1									; plot right of 2 chars
 
 		clc												; add 1 to char to plot
 		txa
@@ -40,44 +44,49 @@ put1	sty screen+1									; plot char high byte
 		adc #$00
 		tay
 
-		clc												; add 80 to screenpos low
+		clc												; add 2 to screenpos low
 		lda put0+1
-		adc #80
+		adc #02
 		sta put0+1
 		lda put0+2
 		adc #0
 		sta put0+2
 
-		clc												; add 80 to screenpos high
+		clc												; add 2 to screenpos high
 		lda put1+1
-		adc #80
+		adc #02
 		sta put1+1
 		lda put1+2
 		adc #0
 		sta put1+2
 
-		inc screenrow									; increase screen row until 25
-		lda screenrow
-		cmp #25
+		inc screencolumn								; increase screen column until 40
+		lda screencolumn
+		cmp #38
 		bne put0
 
-		lda #0											; reset screenrow to 0, increase column until 80
-		sta screenrow
-		inc screencolumn
-		inc screencolumn
-		lda screencolumn
-		cmp #80
+		lda #0											; reset screencolumn to 0, increase row until 25
+		sta screencolumn
+		inc screenrow
+		lda screenrow
+		cmp #25
 		beq endscreenplot
 
-		lda #>screen									; set actual value
-		sta put0+2
-		sta put1+2
-
-		clc												; increase screen column by 1
-		lda screencolumn
+		clc												; add 4 to get to next row
+		lda put0+1
+		adc #04
 		sta put0+1
-		adc #$01
+		lda put0+2
+		adc #0
+		sta put0+2
+
+		clc												; add 4 to get to next row
+		lda put1+1
+		adc #04
 		sta put1+1
+		lda put1+2
+		adc #0
+		sta put1+2
 
 		jmp put0
 
@@ -94,11 +103,13 @@ endscreenplot
 
         rts
 
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
 jpg_render
 
-		lda #<(jpg_ybuf)
+		lda #<(jpg_ybuf+1)
 		sta jpgrnd2+1
-		lda #>(jpg_ybuf)
+		lda #>(jpg_ybuf+1)
 		sta jpgrnd2+2
 
 		ldy #$00
@@ -106,20 +117,41 @@ jpg_render
 jpgrnd_loop
 		ldz #$00
 		ldx #$00
-:
+
 jpgrnd2	lda jpg_ybuf,x
 		sta [uidraw_scrptr],z
 		inz
 		inx
 		inx
 		cpx #64*2
-		bne :-
+		bne jpgrnd2
 
-		inc uidraw_scrptr+1
-		inc jpgrnd2+2
+		clc
+		lda jpgrnd2+1
+		adc #64*2
+		sta jpgrnd2+1
+		lda jpgrnd2+2
+		adc #0
+		sta jpgrnd2+2
+
+		clc
+		lda uidraw_scrptr+0
+		adc #64
+		sta uidraw_scrptr+0
+		lda uidraw_scrptr+1
+		adc #0
+		sta uidraw_scrptr+1
+		lda uidraw_scrptr+2
+		adc #0
+		sta uidraw_scrptr+2
+		lda uidraw_scrptr+3
+		adc #0
+		sta uidraw_scrptr+3
 
 		iny
-		cpy #$0b
-		bne jpgrnd_loop 
+		cpy #38
+		bne jpgrnd_loop
 
 		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
