@@ -143,7 +143,7 @@ ifeq ($(megabuild), 1)
 
 	m65 -l COM3 -F
 	mega65_ftp.exe -l COM3 -s 2000000 -c "cd /" \
-	-c "put D:\Mega\MegaUI\exe\disk.d81 megaui.d81"
+	-c "put D:\Mega\MegaJPG\exe\disk.d81 megaui.d81"
 
 	m65 -l COM3 -F
 	m65 -l COM3 -T 'list'

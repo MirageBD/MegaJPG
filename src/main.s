@@ -142,7 +142,7 @@ entry_main
 		FLOPPY_FAST_LOAD kbsprites,			$30, $34
 		FLOPPY_FAST_LOAD spritepal,			$30, $35
 		FLOPPY_FAST_LOAD $0400,				$30, $36		; jpg_negmlo
-		FLOPPY_FAST_LOAD $0900,				$30, $37
+		FLOPPY_FAST_LOAD $0a00,				$30, $37
 		jsr fl_exit
 
 		sei

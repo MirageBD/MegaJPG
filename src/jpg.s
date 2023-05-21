@@ -282,10 +282,10 @@ jpg_reslen				.word 0						; lame restart markers
 ; F = {  0,    0,    0,     0, 0,      0,     0,   256 }
 ; S = {  0,    0,    0,     0, 0,      0,     0,   256 }
 
-.define jpg_negmlo		$0400						; $0A00-$1000 DATA BLOCK!!!
+.define jpg_negmlo		$0400						; $0A00-$1000 DATA BLOCK!!! = $0600
 .define jpg_posmlo		$0500						; mult tables
-.define jpg_negmhi		$0600
-.define jpg_posmhi		$0700						; 2 pages
+.define jpg_negmhi		$0700
+.define jpg_posmhi		$0800						; 2 pages
 
 /*
 .define jpg_a1lo		$2900						; cos(2a), a=pi/8
@@ -309,34 +309,34 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_sec7		$3e00						; ends $4000
 */
 
-.define jpg_a1lo		$0900	; $0000				; cos(2a), a=pi/8
-.define jpg_a1hi		$0a00	; $0100
+.define jpg_a1lo		$0a00	; $0000				; cos(2a), a=pi/8
+.define jpg_a1hi		$0b00	; $0100
 
-.define jpg_a2lo		$0b00	; $0200				; cos(a) - cos(3a)
-.define jpg_a2hi		$0c00	; $0300
+.define jpg_a2lo		$0c00	; $0200				; cos(a) - cos(3a)
+.define jpg_a2hi		$0d00	; $0300
 
 .define jpg_a3lo		jpg_a1lo					; cos(2a)
 .define jpg_a3hi		jpg_a1hi
 
-.define jpg_a4lo		$0d00	; $0400				; cos(a) + cos(3a)
-.define jpg_a4hi		$0e00	; $0500
-.define jpg_a4gh		$0f00	; $0600
+.define jpg_a4lo		$0e00	; $0400				; cos(a) + cos(3a)
+.define jpg_a4hi		$0f00	; $0500
+.define jpg_a4gh		$1000	; $0600
 
-.define jpg_a5lo		$1000	; $0700				; cos(3a)
-.define jpg_a5hi		$1100	; $0800
+.define jpg_a5lo		$1100	; $0700				; cos(3a)
+.define jpg_a5hi		$1200	; $0800
 
 ; since the algorithm is really an FFT converted into a DCT, the coefficients need a little massaging before tranformation.
 ;     f(i) = s(i) / (2cos(i * pi / 16))      i = 0..7
 ;        with
-;     f(0) = f(0) * 2 / sqrt(2)
+;     f(0) = f(0) * 2 / sqrt(2) , which can be combined with the first step using the table for i=4.
 
-.define jpg_sec1		$1200	; $0900
-.define jpg_sec2		$1400
-.define jpg_sec3		$1600
-.define jpg_sec4		$1800
-.define jpg_sec5		$1a00
-.define jpg_sec6		$1c00
-.define jpg_sec7		$1e00						; ends $4000
+.define jpg_sec1		$1300	; $0900
+.define jpg_sec2		$1500
+.define jpg_sec3		$1700
+.define jpg_sec4		$1900
+.define jpg_sec5		$1b00
+.define jpg_sec6		$1d00
+.define jpg_sec7		$1f00						; ends $2100
 
 .define jpg_crtab1		$8400						; rgb conversion
 .define jpg_crtab2		$8480
@@ -399,7 +399,7 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_c7			jpg_coeff+14
 
 
-.define jpg_count		$f8							; used by getbits, addnode amd decodeac
+.define jpg_count		$f8							; used by getbits, addnode and decodeac
 .define jpg_temp2		$f9							; used for huffman nodes
 .define jpg_huff		$fa							; huffman pointers
 .define jpg_quantp		$fc							; quant table
@@ -415,7 +415,7 @@ jpg_reslen				.word 0						; lame restart markers
 
 .define jpg_qt0			$0340						; quantization tables
 .define jpg_qt1			jpg_qt0+64					; $0380
-.define jpg_qt2			jpg_qt1+64					; $03c0 - only use 3
+.define jpg_qt2			jpg_qt0+128					; $03c0 - only use 3
 
 jpg_process
 
@@ -462,6 +462,8 @@ jpg_process
 		beq :-
 
 		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_draw
+
+		jmp jpg_idct2d	; handle last row
 
 		rts
 
@@ -547,7 +549,7 @@ jpg_ignoresegment									; ignore rest of segment
 		bcs :+
 		lda jpg_eof
 		bne :+
-		jsr jpg_declen
+		jsr jpg_decrease_headerlength
 		bne jpg_ignoresegment
 :		rts
 
@@ -635,7 +637,7 @@ jpg_marker_sos
 		sta jpg_col
 		jsr jpg_restartdecoder
 
-jpg_sos_ready
+jpg_sos_readcomponents
 
 		inc $d020
 
@@ -671,9 +673,9 @@ jpg_sos_readdone
 		adc jpg_col
 		sta jpg_col
 		cmp jpg_numcols
-		bcc jpg_sos_ready
+		bcc jpg_sos_readcomponents
 
-		;jsr jpg_torgb
+		jsr jpg_torgb
 
 		lda #00
 		sta jpg_col
@@ -706,7 +708,7 @@ jpg_sos_norend
 		cmp #25
 		bcs jpg_sos_done
 
-:		lda jpg_temp			; next buffer
+:		lda jpg_temp								; next buffer (i.e. render second char row if vertical sampling is 2)
 		clc
 		adc jpg_buflen+0
 		sta jpg_temp+0
@@ -717,7 +719,7 @@ jpg_sos_norend
 		dec jpg_temp2
 		bne jpg_sos_rend
 
-		jmp jpg_sos_ready
+		jmp jpg_sos_readcomponents
 
 jpg_sos_done
 		inc jpg_eof
@@ -770,7 +772,7 @@ jpg_marker_dqt
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dqt
 
 jpg_marker_dqt_start
-		jsr jpg_declen
+		jsr jpg_decrease_headerlength
 		beq jpg_marker_dqt_end
 		jsr jpg_getbyte
 
@@ -806,7 +808,7 @@ dqt_loop
 		bcs jpg_marker_dqt_err
 		ldy jpg_temp
 		sta (jpg_point),y
-		jsr jpg_declen
+		jsr jpg_decrease_headerlength
 
 		iny
 		cpy #64
@@ -830,7 +832,7 @@ jpg_marker_dht
 		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dht
 
 jpg_marker_dht_start
-		jsr jpg_declen
+		jsr jpg_decrease_headerlength
 		beq dhtjerr
 
 dhtgetb	jsr jpg_getbyte
@@ -873,7 +875,7 @@ dht_ok
 		bcs jpg_marker_dht_error
 		ldx jpg_temp
 		sta jpg_huff_symbols-1,x
-		jsr jpg_declen
+		jsr jpg_decrease_headerlength
 		inx
 		cpx #17
 		bne :-
@@ -908,9 +910,9 @@ dhtloop	inc jpg_huffbits+1							; hi,lo!
 		ldx jpg_hufflen
 		jsr jpg_addnode
 		bcs jpg_marker_dht_end
-		jsr jpg_declen
+		jsr jpg_decrease_headerlength
 		jmp dhtloop
-dhtnext	jsr jpg_declen
+dhtnext	jsr jpg_decrease_headerlength
 		beq jpg_marker_dht_end
 		jmp dhtgetb									; multiple hts
 
@@ -1045,7 +1047,7 @@ sof_get
 		lda jpg_headerlength+0
 		ora jpg_headerlength+1
 		beq sof_err2
-		jsr jpg_declen
+		jsr jpg_decrease_headerlength
 		jsr jpg_getbyte
 		bcc sof_end
 sof_err2
@@ -1060,7 +1062,7 @@ sof_end
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
-jpg_declen
+jpg_decrease_headerlength
 		lda jpg_headerlength+0						; lo byte 0?
 		bne :+										; nope, decrease
 		ora jpg_headerlength+1
@@ -1167,9 +1169,7 @@ jpg_inithuff
 		sta jpg_hufftop+1
 		rts
 
-; create new node; make current node
-; point to it.
-;
+; create new node; make current node point to it.
 ; on entry: .y = 0 -> right node, otherwise left node
 
 jpg_newnode
@@ -1246,7 +1246,7 @@ jpg_anleft
 		sta jpg_huff+1
 		pla
 		sta jpg_huff+0
-		jmp jpgancontinue
+		jmp jpg_ancontinue
 
 jpg_anright
 		ldy #1
@@ -1266,7 +1266,7 @@ jpg_anright
 		pla
 		sta jpg_huff+0
 
-jpgancontinue
+jpg_ancontinue
 		dex
 		bne jpg_anloop
 		lda #$80
@@ -1292,7 +1292,7 @@ jpg_decodedc
 		lda jpg_dchuff0+1,x
 		sta jpg_huff+1
 
-		jsr jpg_gethuff								; get category
+		jsr jpg_gethuff								; get category A = 8
 		ldx jpg_error
 		bne :+
 
@@ -1333,7 +1333,7 @@ jpg_decodeac
 decacloop
 		sty jpg_temp2								; index
 		ldx jpg_tmphuf
-		lda jpg_achuff0,x
+		lda jpg_achuff0+0,x
 		sta jpg_huff+0
 		lda jpg_achuff0+1,x
 		sta jpg_huff+1
@@ -1476,116 +1476,35 @@ jpg_getbits_zero
 ; specifically,
 ;     f(i) = s(i) / (2cos(i * pi / 16))      i = 0..7
 ;        with
-;     f(0) = f(0) * 2 / sqrt(2)
-;
-;     which can be combined with the first step using the table for i=4.
+;     f(0) = f(0) * 2 / sqrt(2), which can be combined with the first step using the table for i=4.
 ;
 ; these multipliers can in part be incorporated in the quantization table, but for now they're out in the open.
 
 jpg_prepdat
-		ldx #00
-		lda #<jpg_sec4
-		sta jpg_point+0
-		lda #>jpg_sec4
-		sta jpg_point+1
-		lda jpg_f0+0
-		sta jpg_bitslo
-		lda jpg_f0+1
-		jsr jpg_pmult
-		sta jpg_f0+1
-		lda jpg_bitslo
-		sta jpg_f0+0
 
-		ldx #00
-		lda #<jpg_sec1
-		sta jpg_point+0
-		lda #>jpg_sec1
-		sta jpg_point+1
-		lda jpg_f1+0
-		sta jpg_bitslo
-		lda jpg_f1+1
-		jsr jpg_pmult
-		sta jpg_f1+1
-		lda jpg_bitslo
-		sta jpg_f1+0
+		.macro PREPDAT sec, f
+			ldx #00
+			lda #<sec
+			sta jpg_point+0
+			lda #>sec
+			sta jpg_point+1
+			lda f+0
+			sta jpg_bitslo
+			lda f+1
+			jsr jpg_pmult
+			sta f+1
+			lda jpg_bitslo
+			sta f+0
+		.endmacro
 
-		ldx #00
-		lda #<jpg_sec2
-		sta jpg_point+0
-		lda #>jpg_sec2
-		sta jpg_point+1
-		lda jpg_f2+0
-		sta jpg_bitslo
-		lda jpg_f2+1
-		jsr jpg_pmult
-		sta jpg_f2+1
-		lda jpg_bitslo
-		sta jpg_f2+0
-
-		ldx #00
-		lda #<jpg_sec3
-		sta jpg_point+0
-		lda #>jpg_sec3
-		sta jpg_point+1
-		lda jpg_f3+0
-		sta jpg_bitslo
-		lda jpg_f3+1
-		jsr jpg_pmult
-		sta jpg_f3+1
-		lda jpg_bitslo
-		sta jpg_f3+0
-
-		ldx #00
-		lda #<jpg_sec4
-		sta jpg_point+0
-		lda #>jpg_sec4
-		sta jpg_point+1
-		lda jpg_f4+0
-		sta jpg_bitslo
-		lda jpg_f4+1
-		jsr jpg_pmult
-		sta jpg_f4+1
-		lda jpg_bitslo
-		sta jpg_f4+0
-
-		ldx #00
-		lda #<jpg_sec5
-		sta jpg_point+0
-		lda #>jpg_sec5
-		sta jpg_point+1
-		lda jpg_f5+0
-		sta jpg_bitslo
-		lda jpg_f5+1
-		jsr jpg_pmult
-		sta jpg_f5+1
-		lda jpg_bitslo
-		sta jpg_f5+0
-
-		ldx #00
-		lda #<jpg_sec6
-		sta jpg_point+0
-		lda #>jpg_sec6
-		sta jpg_point+1
-		lda jpg_f6+0
-		sta jpg_bitslo
-		lda jpg_f6+1
-		jsr jpg_pmult
-		sta jpg_f6+1
-		lda jpg_bitslo
-		sta jpg_f6+0
-
-		ldx #00
-		lda #<jpg_sec7
-		sta jpg_point+0
-		lda #>jpg_sec7
-		sta jpg_point+1
-		lda jpg_f7+0
-		sta jpg_bitslo
-		lda jpg_f7+1
-		jsr jpg_pmult
-		sta jpg_f7+1
-		lda jpg_bitslo
-		sta jpg_f7+0
+		PREPDAT jpg_sec4, jpg_f0
+		PREPDAT jpg_sec1, jpg_f1
+		PREPDAT jpg_sec2, jpg_f2
+		PREPDAT jpg_sec3, jpg_f3
+		PREPDAT jpg_sec4, jpg_f4
+		PREPDAT jpg_sec5, jpg_f5
+		PREPDAT jpg_sec6, jpg_f6
+		PREPDAT jpg_sec7, jpg_f7
 
 		rts
 
@@ -1628,7 +1547,7 @@ jpg_pmult_neg
 		lda #00
 		sbc jpg_bitshi
 		beq :++
-:		inx					; shift count
+:		inx											; shift count
 		lsr
 		ror jpg_bitslo
 		cmp #00
@@ -1667,7 +1586,7 @@ jpg_pmult_neg
 ; compute the inverse dct (1d)
 ; uses modified reversed flowgraph from pennebaker & mitchell, p. 52
 ;
-; input: dct coeffs contained in flo/fhi
+; input:  dct coeffs contained in flo/fhi
 ; output: original coeffs in coeffs
 
 /*
@@ -2193,8 +2112,8 @@ jpg_idct2d_cols										; first the columns
 ji2dcloop		
 		stx jpg_index
 		ldy #00
-:		lda jpg_trans,x
-		sta jpg_dct,y
+:		lda jpg_trans+0,x
+		sta jpg_dct+0,y
 		lda jpg_trans+1,x
 		sta jpg_dct+1,y
 		txa
@@ -2205,11 +2124,13 @@ ji2dcloop
 		iny
 		cpy #16
 		bne :-
+
 		jsr jpg_idct
+
 		ldy #0
 		ldx jpg_index
-:		lda jpg_coeff,y
-		sta jpg_trans,x
+:		lda jpg_coeff+0,y
+		sta jpg_trans+0,x
 		lda jpg_coeff+1,y
 		sta jpg_trans+1,x
 		txa
@@ -2233,8 +2154,8 @@ jpg_idct2d_rows										; then the rows
 		stx jpg_count
 ji2drloop		
 		ldy #00
-:		lda jpg_trans,x
-		sta jpg_dct,y
+:		lda jpg_trans+0,x
+		sta jpg_dct+0,y
 		lda jpg_trans+1,x
 		sta jpg_dct+1,y
 		inx
@@ -2247,7 +2168,7 @@ ji2drloop
 		jsr jpg_idct
 		ldy jpg_count
 		ldx #00
-:		lda jpg_coeff,x
+:		lda jpg_coeff+0,x
 		sta jpg_bitslo
 		lda jpg_coeff+1,x
 		cmp #$80
@@ -2296,23 +2217,23 @@ ji2drcont
 .define jpg_crpoint		jpg_bitslo
 
 jpg_torgb
-		lda #<jpg_ybuf
-		sta jpg_ypoint
-		lda #>jpg_ybuf
+		lda #<(jpg_ybuf)
+		sta jpg_ypoint+0
+		lda #>(jpg_ybuf)
 		sta jpg_ypoint+1
-		lda #<jpg_cbbuf
-		sta jpg_cbpoint
-		lda #>jpg_cbbuf
+		lda #<(jpg_cbbuf)
+		sta jpg_cbpoint+0
+		lda #>(jpg_cbbuf)
 		sta jpg_cbpoint+1
-		lda #<jpg_crbuf
-		sta jpg_crpoint
-		lda #>jpg_crbuf
+		lda #<(jpg_crbuf)
+		sta jpg_crpoint+0
+		lda #>(jpg_crbuf)
 		sta jpg_crpoint+1
 
 		ldy #00
 		ldx jpg_ncomps
 		dex
-		bne jpg_torgb_loop
+		bne jpg_torgb_loop								; if grayscale, copy Y to Cb and Cr
 		ldx #>(jpg_cbbuf-jpg_ybuf)
 :		lda (jpg_ypoint),y
 		sta (jpg_cbpoint),y
@@ -2441,13 +2362,16 @@ jpg_linelen		.word $0130
 jpg_desample 
 
 		lda #00
+
 jpg_desample_newrow		
 		ldx jpg_vsamp
 		stx jpg_huff								; temporary
+
 jpg_desample_oldrow
 		sta jpg_temp2								; current element
 		lda #8
 		sta jpg_count								; column
+		
 		ldy #00
 :		ldx jpg_temp2
 		lda jpg_trans,x
@@ -2462,16 +2386,16 @@ jpg_desample_expand
 		dec jpg_count
 		bne :-
 
-		lda jpg_dest+0								; next scanline
-		clc
-		adc jpg_linelen
+		clc											; next scanline
+		lda jpg_dest+0
+		adc jpg_linelen+0
 		sta jpg_dest+0
 		lda jpg_dest+1
 		adc jpg_linelen+1
 		sta jpg_dest+1
 
-		lda jpg_temp2
 		sec
+		lda jpg_temp2
 		sbc #8										; start of row
 		dec jpg_huff								; horizonal sampling
 		bne jpg_desample_oldrow
@@ -2479,6 +2403,41 @@ jpg_desample_expand
 		cmp #64
 		bne jpg_desample_newrow
 		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+; FOR DEBUG PURPOSES
+; nodesample -- don't expand dct square, just leave as is, but copy so it can be debugged
+; on entry: dest = destination buffer
+
+jpg_nodesample 
+
+		ldx #0
+
+:		ldy #0
+:		lda jpg_trans,x
+		sta (jpg_dest),y
+		iny
+		inx
+		cpy #8
+		bne :-
+
+		clc											; next scanline
+		lda jpg_dest+0
+		adc jpg_linelen+0
+		sta jpg_dest+0
+		lda jpg_dest+1
+		adc jpg_linelen+1
+		sta jpg_dest+1
+
+		cpx #64
+		bne :--
+
+		rts
+
+
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -2501,34 +2460,54 @@ jpg_zigzag
 		.byte  116, 118, 104,  90,  76,  62,  78,  92
 		.byte  106, 120, 122, 108,  94, 110, 124, 126
 
+;   0  1  5  6 14 15 27 28
+;   2  4  7 13 16 26 29 42
+;   3  8 12 17 25 30 41 43
+;   9 11 18 24 31 40 44 53
+;  10 19 23 32 39 45 52 54
+;  20 22 33 38 46 51 55 60
+;  21 34 37 47 50 56 59 61
+;  35 36 48 49 57 58 62 63
+
+;  0  1  8 16  9  2  3 10
+; 17 24 32 25 18 11  4  5
+; 12 19 26 33 40 48 41 34
+; 27 20 13  6  7 14 21 28
+; 35 42 49 56 57 50 43 36
+; 29 22 15 23 30 37 44 51
+; 58 59 52 45 38 31 39 46
+; 53 60 61 54 47 55 62 63
+
 jpg_dequantize
 		ldx jpg_curcomp
 		lda jpg_cquant,x
 		asl
 		tax
-		lda jpg_quanttab,x
-		sta jpg_quantp
+		lda jpg_quanttab+0,x
+		sta jpg_quantp+0
 		lda jpg_quanttab+1,x
 		sta jpg_quantp+1
 
+		; OK up until here!!!
 		ldx #63
 jpg_dequantize_loop
 		txa
 		tay
 		lda (jpg_quantp),y
-		sta jpg_mult1lo
-		sta jpg_mult1hi
+		sta jpg_mult1lo+0
+		sta jpg_mult1hi+0
 		eor #$ff
 		clc
 		adc #1
-		sta jpg_mult2lo
-		sta jpg_mult2hi
+		sta jpg_mult2lo+0
+		sta jpg_mult2hi+0
 
 		ldy jpg_veclo,x
 		bne :+
 		sty jpg_bitslo
 		sty jpg_bitshi
 		beq jpg_dequantize_high
+
 :		lda (jpg_mult1lo),y
 		sec
 		sbc (jpg_mult2lo),y
@@ -2552,14 +2531,16 @@ jpg_dequantize_high
 		lda jpg_bitslo
 		sta jpg_trans,y
 		dex
+
 		bpl jpg_dequantize_loop
+
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
 jpg_curbuf		.word 0
 jpg_rend		.byte 0
-jpg_currow		.byte 0
+;jpg_currow		.byte 0
 jpg_curcol		.byte 0
 jpg_rendflag	.byte 0
 
@@ -2576,7 +2557,7 @@ jpg_fetch											; fetch the data
 		rol jpg_dest+1
 		asl
 		rol jpg_dest+1
-		adc jpg_curbuf								; ybuf, etc.
+		adc jpg_curbuf+0							; ybuf, etc.
 		sta jpg_dest+0 								; data storage
 		lda jpg_curbuf+1
 		adc jpg_dest+1
@@ -2585,17 +2566,26 @@ jpg_fetch											; fetch the data
 :decode
 		jsr jpg_decodedc
 		lda jpg_error
-		bne :+
+		bne decode_error
 		jsr jpg_decodeac
 		lda jpg_error
+		bne decode_error
+		lda jpg_rendflag							; are we rendering (i.e. are we right of the offset?)? (no point dequantizing, etc, if we aren't)
 		bne :+
-		lda jpg_rendflag
-		bne :+
-		jsr jpg_dequantize
-		jsr jpg_idct2d
-		jmp jpg_desample
 
+		jsr jpg_dequantize
+
+		jsr jpg_idct2d
+		;jmp jpg_desample
+		jmp jpg_nodesample
 :		rts
+
+decode_error
+		lda #$00
+		sta $d020
+		lda #$80
+		sta $d020
+		jmp :-
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -2609,7 +2599,8 @@ jpg_coloff		.byte 0								; col offset
 jpg_readdataunit
 		sta jpg_curbuf+0
 		sty jpg_curbuf+1
-		stx jpg_curcomp
+		stx jpg_curcomp								; 1 for Y, 2 for Cb, 3 for Cr
+
 		lda #00
 		sta jpg_rend
 
@@ -2625,18 +2616,19 @@ jpg_readdataunit
 		tay
 		clc
 :		iny
-		adc jpg_csampv,x
-		cmp jpg_csampv
+		adc jpg_csampv,x							; x = 1 -> 2
+		cmp jpg_csampv								; max = 2
 		bcc :-
-		sty jpg_vsamp
+		sty jpg_vsamp								; 1
 
-		lda jpg_csampv,x							; vert samp
-		sta jpg_temp
+		lda jpg_csampv,x
+		sta jpg_temp+0								; vert samp = 2
 
 jpg_readdataunit_loopy
-		ldx jpg_curcomp
-		lda jpg_csamph,x							; horiz sampling
-		sta jpg_temp+1
+		ldx jpg_curcomp								; 1
+
+		lda jpg_csamph,x
+		sta jpg_temp+1								; horiz sampling = 2
 		lda jpg_col
 		sec
 		sbc jpg_coloff
@@ -2646,6 +2638,7 @@ jpg_readdataunit_loopx
 		lda jpg_rend
 		sta jpg_rendflag
 		jsr jpg_fetch								; FETCH!!!
+
 		lda jpg_error
 		bne jpg_readdataunit_end
 		lda jpg_curcol
@@ -2657,10 +2650,10 @@ jpg_readdataunit_loopx
 
 		ldx jpg_vsamp
 jpg_readdataunit_nextrow
-		lda jpg_curbuf
 		clc
+		lda jpg_curbuf+0
 		adc jpg_buflen+0
-		sta jpg_curbuf
+		sta jpg_curbuf+0
 		lda jpg_curbuf+1
 		adc jpg_buflen+1
 		sta jpg_curbuf+1
