@@ -119,21 +119,21 @@ put1	sty screen+1									; plot right of 2 chars
 		cmp #25
 		beq endscreenplot
 
-		clc												; add 4 to get to next row
-		lda put0+1
-		adc #04
-		sta put0+1
-		lda put0+2
-		adc #0
-		sta put0+2
+		;clc												; add 4 to get to next row
+		;lda put0+1
+		;adc #04
+		;sta put0+1
+		;lda put0+2
+		;adc #0
+		;sta put0+2
 
-		clc												; add 4 to get to next row
-		lda put1+1
-		adc #04
-		sta put1+1
-		lda put1+2
-		adc #0
-		sta put1+2
+		;clc												; add 4 to get to next row
+		;lda put1+1
+		;adc #04
+		;sta put1+1
+		;lda put1+2
+		;adc #0
+		;sta put1+2
 
 		jmp put0
 
@@ -152,16 +152,28 @@ endscreenplot
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
-jpg_rend_column
-		.byte 0
+jpg_rend_red		.byte 0
+jpg_rend_green		.byte 0
+jpg_rend_blue		.byte 0
+
+jpg_rend_column		.byte 0
 
 jpg_render
 
-		sta jpgrnd2+1
+		sta jpgrnd_red+1
+		sta jpgrnd_green+1
+		sta jpgrnd_blue+1
 		tya
 		clc
-		adc #0*19										; 0 = render Y buffer, 1 = render Cr buffer, 2 = render Cb buffer
-		sta jpgrnd2+2
+		adc #>(0*jpg_channelbufsize)
+		sta jpgrnd_red+2
+		clc
+		adc #>(1*jpg_channelbufsize)
+		sta jpgrnd_green+2
+		clc
+		adc #>(1*jpg_channelbufsize)
+		sta jpgrnd_blue+2
+
 
 		lda #$00
 		sta jpg_rend_column
@@ -172,20 +184,49 @@ jpgrnd_column_loop
 jpgrnd_scan_loop
 		ldz #$00
 		ldx #$00
-jpgrnd2	lda jpg_ybuf,x
+
+jpgrend_getrgb
+jpgrnd_red
+		lda jpg_ybuf,x
+		sta jpg_rend_red
+jpgrnd_green
+		lda jpg_ybuf,x
+		sta jpg_rend_green
+jpgrnd_blue
+		lda jpg_ybuf,x
+		sta jpg_rend_blue
+
+		lda jpg_rend_blue
 		sta [uidraw_scrptr],z
+
 		inz
 		inx
 		cpx #8
-		bne jpgrnd2
+		bne jpgrend_getrgb
 
 		clc
-		lda jpgrnd2+1
+		lda jpgrnd_red+1
 		adc #<(jpg_bufwidth*8)
-		sta jpgrnd2+1
-		lda jpgrnd2+2
+		sta jpgrnd_red+1
+		lda jpgrnd_red+2
 		adc #>(jpg_bufwidth*8)
-		sta jpgrnd2+2
+		sta jpgrnd_red+2
+
+		clc
+		lda jpgrnd_green+1
+		adc #<(jpg_bufwidth*8)
+		sta jpgrnd_green+1
+		lda jpgrnd_green+2
+		adc #>(jpg_bufwidth*8)
+		sta jpgrnd_green+2
+
+		clc
+		lda jpgrnd_blue+1
+		adc #<(jpg_bufwidth*8)
+		sta jpgrnd_blue+1
+		lda jpgrnd_blue+2
+		adc #>(jpg_bufwidth*8)
+		sta jpgrnd_blue+2
 
 		clc
 		lda uidraw_scrptr+0
@@ -206,19 +247,36 @@ jpgrnd2	lda jpg_ybuf,x
 		bne jpgrnd_scan_loop
 
 		sec
-		lda jpgrnd2+1
+		lda jpgrnd_red+1
 		sbc #<(jpg_bufwidth*8*8 - 8)
-		sta jpgrnd2+1
-		lda jpgrnd2+2
+		sta jpgrnd_red+1
+		lda jpgrnd_red+2
 		sbc #>(jpg_bufwidth*8*8 - 8)
-		sta jpgrnd2+2
+		sta jpgrnd_red+2
+
+		sec
+		lda jpgrnd_green+1
+		sbc #<(jpg_bufwidth*8*8 - 8)
+		sta jpgrnd_green+1
+		lda jpgrnd_green+2
+		sbc #>(jpg_bufwidth*8*8 - 8)
+		sta jpgrnd_green+2
+
+		sec
+		lda jpgrnd_blue+1
+		sbc #<(jpg_bufwidth*8*8 - 8)
+		sta jpgrnd_blue+1
+		lda jpgrnd_blue+2
+		sbc #>(jpg_bufwidth*8*8 - 8)
+		sta jpgrnd_blue+2
 
 		inc jpg_rend_column
 		lda jpg_rend_column
 		cmp #jpg_bufwidth
-		bne jpgrnd_column_loop
+		beq :+
+		jmp jpgrnd_column_loop
 
-		rts
+:		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 

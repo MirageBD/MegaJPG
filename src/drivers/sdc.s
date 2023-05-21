@@ -1,7 +1,7 @@
 ; ----------------------------------------------------------------------------------------------------
 
 .define sdc_transferbuffer	$0200
-.define sdc_sectorbuffer	$8000
+.define sdc_sectorbuffer	$7e00
 
 sdc_bytecounterlo	.byte 0
 sdc_bytecounterhi	.byte 0

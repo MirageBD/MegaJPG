@@ -130,7 +130,6 @@ uilistbox_setselectedindex
 		adc (zpptr2),y
 		ldy #$04
 		sta (zpptr2),y
-		ldy #$03
 		adc #$00
 		ldy #$04
 		sta (zpptr2),y

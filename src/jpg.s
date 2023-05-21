@@ -338,21 +338,21 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_sec6		$1d00
 .define jpg_sec7		$1f00						; ends $2100
 
-.define jpg_crtab1		$8400						; rgb conversion
-.define jpg_crtab2		$8480
-.define jpg_cbtab1		$8500
-.define jpg_cbtab2		$8580
+.define jpg_crtab1		$8100						; rgb conversion
+.define jpg_crtab2		$8180
+.define jpg_cbtab1		$8200
+.define jpg_cbtab2		$8280
 
-.define jpg_trans		$8600						; transform
+.define jpg_trans		$8300						; transform
 
-.define jpg_veclo		$8680						; vec to be quantized
-.define jpg_vechi		$86c0
+.define jpg_veclo		$8380						; vec to be quantized
+.define jpg_vechi		$83c0
 
-.define jpg_imgbuf		$8700						; image data buffer $8700+3*$1300=$c000
+.define jpg_imgbuf		$8400						; image data buffer $8700+3*$1300=$c000
 
 .define jpg_huffmem		$c000						; huffman trees ($c000-$c570)
 
-.define jpg_bufwidth	38
+.define jpg_bufwidth	40
 .define jpg_bufheight	2
 
 .define jpg_channelbufsize	jpg_bufwidth*8*8*jpg_bufheight
@@ -455,8 +455,8 @@ jpg_process
 		jsr jpg_inithuff
 		jsr jpg_initbuff
 
-		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_startaddentries
-		UICORE_SETLISTBOXTEXT la1listbox, uitxt_jpgstart
+		;UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_startaddentries
+		;UICORE_SETLISTBOXTEXT la1listbox, uitxt_jpgstart
 
 		jsr jpg_getapp0
 
@@ -466,14 +466,14 @@ jpg_process
 		lda jpg_eof
 		beq :-
 
-		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_draw
+		;UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_draw
 
-		jmp jpg_idct2d	; handle last row
+		;jmp jpg_idct2d	; handle last row
 
 		rts
 
 jpg_err1
-		UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_draw
+		;UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_draw
 
 		lda #$a0
 		sta $d020
@@ -678,7 +678,7 @@ jpg_sos_readdone
 		cmp jpg_numcols
 		bcc jpg_sos_readcomponents
 
-		;jsr jpg_torgb
+		jsr jpg_torgb
 
 		lda #00
 		sta jpg_col
