@@ -195,9 +195,9 @@ jpg_render
 
 jpgrnd_column_loop
 		ldy #$00
+		ldz #$00
 
 jpgrnd_scan_loop
-		ldz #$00
 		ldx #$00
 
 jpgrend_getrgb
@@ -244,9 +244,13 @@ jpgrnd_blue
 		adc #>(jpg_bufwidth*8)
 		sta jpgrnd_blue+2
 
-		clc
+		iny
+		cpy #8
+		bne jpgrnd_scan_loop
+
+		clc											; add 64 to get to the next character
 		lda uidraw_scrptr+0
-		adc #$08
+		adc #64
 		sta uidraw_scrptr+0
 		lda uidraw_scrptr+1
 		adc #$00
@@ -257,10 +261,6 @@ jpgrnd_blue
 		lda uidraw_scrptr+3
 		adc #$00
 		sta uidraw_scrptr+3
-
-		iny
-		cpy #8
-		bne jpgrnd_scan_loop
 
 		sec
 		lda jpgrnd_red+1
