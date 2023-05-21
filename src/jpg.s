@@ -349,14 +349,19 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_vechi		$86c0
 
 .define jpg_imgbuf		$8700						; image data buffer $8700+3*$1300=$c000
-.define jpg_imgbufsize	$3900
 
 .define jpg_huffmem		$c000						; huffman trees ($c000-$c570)
 
+.define jpg_bufwidth	38
+.define jpg_bufheight	2
 
-.define jpg_ybuf		jpg_imgbuf+$0000			; $8700
-.define jpg_cbbuf		jpg_imgbuf+$1300			; $9a00
-.define jpg_crbuf		jpg_imgbuf+$2600			; $ad00
+.define jpg_channelbufsize	jpg_bufwidth*8*8*jpg_bufheight
+
+.define jpg_imgbufsize	3*jpg_channelbufsize
+
+.define jpg_ybuf		jpg_imgbuf+0*jpg_channelbufsize			; $8700
+.define jpg_cbbuf		jpg_imgbuf+1*jpg_channelbufsize			; $9a00
+.define jpg_crbuf		jpg_imgbuf+2*jpg_channelbufsize			; $ad00
 
 .define jpg_point		$02
 .define jpg_dest		$04
@@ -484,7 +489,7 @@ jpg_initbuff
 		sta jpg_point+0
 		lda #>jpg_imgbuf
 		sta jpg_point+1
-		ldx #>jpg_imgbufsize
+		ldx #>(jpg_imgbufsize)
 		lda #$80
 		ldy #$00
 jpgibloop
@@ -639,8 +644,6 @@ jpg_marker_sos
 
 jpg_sos_readcomponents
 
-		inc $d020
-
 		ldx #1										; luma/intensity
 		lda #<(jpg_ybuf)
 		ldy #>(jpg_ybuf)
@@ -675,7 +678,7 @@ jpg_sos_readdone
 		cmp jpg_numcols
 		bcc jpg_sos_readcomponents
 
-		jsr jpg_torgb
+		;jsr jpg_torgb
 
 		lda #00
 		sta jpg_col
@@ -2357,7 +2360,7 @@ jpg_torgb_done
 ; desample -- expand dct square by sample factor and reorg data.
 ; on entry: dest = destination buffer
 
-jpg_linelen		.word $0130
+jpg_linelen		.word jpg_bufwidth*8
 
 jpg_desample 
 
@@ -2548,7 +2551,7 @@ jpg_fetch											; fetch the data
 		lda #00
 		sta jpg_dest+1
 		lda jpg_curcol
-		cmp #37										; catches neg too
+		cmp #jpg_bufwidth							; catches neg too
 		rol jpg_rendflag							; c set?
 
 		asl											; offset = col*8
@@ -2589,9 +2592,7 @@ decode_error
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
-; buffer size = 38*8 = $0130 * 8 lines
-
-jpg_buflen		.word $0980
+jpg_buflen		.word jpg_bufwidth*8*8
 
 jpg_col			.byte 0
 jpg_coloff		.byte 0								; col offset

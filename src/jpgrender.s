@@ -109,7 +109,7 @@ put1	sty screen+1									; plot right of 2 chars
 
 		inc screencolumn								; increase screen column until 40
 		lda screencolumn
-		cmp #38
+		cmp #jpg_bufwidth
 		bne put0
 
 		lda #0											; reset screencolumn to 0, increase row until 25
@@ -160,7 +160,7 @@ jpg_render
 		sta jpgrnd2+1
 		tya
 		clc
-		adc #1*19										; 0 = render Y buffer, 1 = render Cr buffer, 2 = render Cb buffer
+		adc #0*19										; 0 = render Y buffer, 1 = render Cr buffer, 2 = render Cb buffer
 		sta jpgrnd2+2
 
 		lda #$00
@@ -181,10 +181,10 @@ jpgrnd2	lda jpg_ybuf,x
 
 		clc
 		lda jpgrnd2+1
-		adc #<(38*8)
+		adc #<(jpg_bufwidth*8)
 		sta jpgrnd2+1
 		lda jpgrnd2+2
-		adc #>(38*8)
+		adc #>(jpg_bufwidth*8)
 		sta jpgrnd2+2
 
 		clc
@@ -207,15 +207,15 @@ jpgrnd2	lda jpg_ybuf,x
 
 		sec
 		lda jpgrnd2+1
-		sbc #<(8*$0130-8)
+		sbc #<(jpg_bufwidth*8*8 - 8)
 		sta jpgrnd2+1
 		lda jpgrnd2+2
-		sbc #>(8*$0130-8)
+		sbc #>(jpg_bufwidth*8*8 - 8)
 		sta jpgrnd2+2
 
 		inc jpg_rend_column
 		lda jpg_rend_column
-		cmp #38
+		cmp #jpg_bufwidth
 		bne jpgrnd_column_loop
 
 		rts

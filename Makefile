@@ -122,7 +122,7 @@ $(EXE_DIR)/boot.prg: $(EXE_DIR)/boot.o Linkfile
 
 $(EXE_DIR)/disk.d81: $(EXE_DIR)/boot.prg $(BIN_DIR)/font_chars1.bin $(BIN_DIR)/glyphs_chars1.bin $(BIN_DIR)/cursor_sprites1.bin $(BIN_DIR)/kbcursor_sprites1.bin
 	$(RM) $@
-	$(CC1541) -n "mega" -i " 2022" -d 19 -v\
+	$(CC1541) -n "megajpg" -i " 2023" -d 19 -v\
 	 \
 	 -f "boot" -w $(EXE_DIR)/bootaddr.prg \
 	 -f "00" -w $(BIN_DIR)/font_chars1.bin \
@@ -133,6 +133,7 @@ $(EXE_DIR)/disk.d81: $(EXE_DIR)/boot.prg $(BIN_DIR)/font_chars1.bin $(BIN_DIR)/g
 	 -f "05" -w $(BIN_DIR)/cursor_pal1.bin \
 	 -f "06" -w $(BIN_DIR)/data0a00.bin \
 	 -f "07" -w $(BIN_DIR)/data4000.bin \
+	 -f "08" -w $(BIN_DIR)/ycbcc2rgb.bin \
 	$@
 
 # -----------------------------------------------------------------------------
