@@ -160,6 +160,8 @@ entry_main
 		jsr ui_init										; initialise UI
 		jsr ui_setup
 
+		jsr jpg_rend_preppalette						; ui setup is complete, call reversenibble on uipalette to bring it into 'normal' 0-255 range
+
 		lda #$7f										; disable CIA interrupts
 		sta $dc0d
 		sta $dd0d

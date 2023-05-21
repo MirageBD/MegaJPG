@@ -19,6 +19,21 @@ reversenibble
 		ora reversenibble_tmp2
 		rts
 
+jpg_rend_preppalette									; bring ui palette into 'normal' 0-255 range
+		ldx #$00
+:		lda uipal+$0000,x
+		jsr reversenibble
+		sta uipal+$0000,x
+		lda uipal+$0100,x
+		jsr reversenibble
+		sta uipal+$0100,x
+		lda uipal+$0200,x
+		jsr reversenibble
+		sta uipal+$0200,x
+		inx
+		bne :-
+		rts
+
 jpg_rendinit
 		lda #40*2										; logical chars per row
 		sta $d058
@@ -186,17 +201,18 @@ jpgrnd_scan_loop
 		ldx #$00
 
 jpgrend_getrgb
+
 jpgrnd_red
-		lda jpg_ybuf,x
+		lda $babe,x
 		sta jpg_rend_red
 jpgrnd_green
-		lda jpg_ybuf,x
+		lda $babe,x
 		sta jpg_rend_green
 jpgrnd_blue
-		lda jpg_ybuf,x
+		lda $babe,x
 		sta jpg_rend_blue
 
-		lda jpg_rend_blue
+		jsr jpgrend_getnearestindex
 		sta [uidraw_scrptr],z
 
 		inz
@@ -277,6 +293,50 @@ jpgrnd_blue
 		jmp jpgrnd_column_loop
 
 :		rts
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpgrend_nearestindex	.byte 0
+
+jpgrend_getnearestindex
+
+		lda #$00
+		sta jpgrend_nearestindex
+
+/*
+		phx
+
+		ldx #$00
+:		lda jpg_rend_red
+		cmp uipal+0*$0100,x
+		lda jpg_rend_green
+		cmp uipal+1*$0100,x
+		lda jpg_rend_blue
+		cmp uipal+2*$0100,x
+		inx
+		bne :-
+
+		plx
+*/
+
+		lda jpg_rend_red
+		sta jpgrend_nearestindex
+
+		lda jpgrend_nearestindex
+
+		rts
+		
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpg_bayer_matrix
+		.byte  37, 139,  63, 165,  37, 139,  63, 165
+		.byte 190,  88, 216, 114, 190,  88, 216, 114
+		.byte  63, 165,  37, 139,  63, 165,  37, 139
+		.byte 216, 114, 190,  88, 216, 114, 190,  88
+		.byte  37, 139,  63, 165,  37, 139,  63, 165
+		.byte 190,  88, 216, 114, 190,  88, 216, 114
+		.byte  63, 165,  37, 139,  63, 165,  37, 139
+		.byte 216, 114, 190,  88, 216, 114, 190,  88
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
