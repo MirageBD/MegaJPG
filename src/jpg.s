@@ -2406,7 +2406,7 @@ jpg_desample_expand
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
-
+/*
 
 ; FOR DEBUG PURPOSES
 ; nodesample -- don't expand dct square, just leave as is, but copy so it can be debugged
@@ -2437,7 +2437,7 @@ jpg_nodesample
 
 		rts
 
-
+*/
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -2576,8 +2576,8 @@ jpg_fetch											; fetch the data
 		jsr jpg_dequantize
 
 		jsr jpg_idct2d
-		;jmp jpg_desample
-		jmp jpg_nodesample
+		jmp jpg_desample
+		;jmp jpg_nodesample
 :		rts
 
 decode_error

@@ -160,7 +160,7 @@ jpg_render
 		sta jpgrnd2+1
 		tya
 		clc
-		adc #0*19										; 0 = render Y buffer, 1 = render Cr buffer, 2 = render Cb buffer
+		adc #1*19										; 0 = render Y buffer, 1 = render Cr buffer, 2 = render Cb buffer
 		sta jpgrnd2+2
 
 		lda #$00
