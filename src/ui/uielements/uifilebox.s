@@ -285,10 +285,10 @@ uifilebox_processdirentry
 
 uifilebox_drawlistreleased
 
-		lda zpptrtmp+1
-		cmp #$ff
-		bne :+
-		rts
+;		lda zpptrtmp+1
+;		cmp #$ff
+;		bne :+
+;		rts
 
 :		jsr uidraw_set_draw_position
 
