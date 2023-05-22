@@ -938,7 +938,7 @@ jpg_csamph	.byte 0, 0, 0, 0, 0, 0					; (horizontal)
 jpg_cquant	.byte 0, 0, 0, 0, 0, 0					; quantization table
 
 jpg_marker_sof
-		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_sof
+		;UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_sof
 
 jpg_marker_sof_start
 		ldx #5
@@ -2380,7 +2380,7 @@ jpg_desample_oldrow
 		lda jpg_trans,x
 		ldx jpg_hsamp
 
-jpg_desample_expand		
+jpg_desample_expand
 		sta (jpg_dest),y
 		iny
 		dex
@@ -2408,6 +2408,37 @@ jpg_desample_expand
 		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpg_desample_bayer
+
+		ldx #0
+
+:		ldy #0
+:		lda jpg_trans,x
+
+		sta $d770
+		lda jpg_bayer_matrix,x
+		sta $d774
+		lda $d778+1
+
+		sta (jpg_dest),y
+		iny
+		inx
+		cpy #8
+		bne :-
+
+		clc											; next scanline
+		lda jpg_dest+0
+		adc jpg_linelen+0
+		sta jpg_dest+0
+		lda jpg_dest+1
+		adc jpg_linelen+1
+		sta jpg_dest+1
+
+		cpx #64
+		bne :--
+
+		rts
 
 /*
 
@@ -2491,7 +2522,6 @@ jpg_dequantize
 		lda jpg_quanttab+1,x
 		sta jpg_quantp+1
 
-		; OK up until here!!!
 		ldx #63
 jpg_dequantize_loop
 		txa
@@ -2574,13 +2604,18 @@ jpg_fetch											; fetch the data
 		lda jpg_error
 		bne decode_error
 		lda jpg_rendflag							; are we rendering (i.e. are we right of the offset?)? (no point dequantizing, etc, if we aren't)
-		bne :+
+		bne :++
 
 		jsr jpg_dequantize
 
 		jsr jpg_idct2d
-		jmp jpg_desample
-		;jmp jpg_nodesample
+
+		lda jpg_curcomp
+		cmp #1
+		bne :+
+		jmp jpg_desample_bayer						; add bayer pattern to Y/luma component layer
+:		jmp jpg_desample
+
 :		rts
 
 decode_error

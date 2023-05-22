@@ -430,7 +430,7 @@ uifilebox_drawfile
  		cpy uifilebox_filenameextensionpos
 		bne :-
 
-		lda (zpptrtmp),y								; is we at the end of the filename, or is there an extension?
+		lda (zpptrtmp),y								; are we at the end of the filename, or is there an extension?
 		beq :++
 
 		iny												; skip extension

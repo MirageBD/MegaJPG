@@ -4,6 +4,11 @@ screenrow		.byte 0
 reversenibble_tmp	.byte 0
 reversenibble_tmp2	.byte 0
 
+jpg_rend_foo
+		.repeat 42
+			.byte 0, 51, 102, 153, 204, 255
+		.endrepeat
+
 reversenibble
 		sta reversenibble_tmp
 		lsr
@@ -19,22 +24,12 @@ reversenibble
 		ora reversenibble_tmp2
 		rts
 
-jpg_rend_preppalette									; bring ui palette into 'normal' 0-255 range
-		ldx #$00
-:		lda uipal+$0000,x
-		jsr reversenibble
-		sta uipal+$0000,x
-		lda uipal+$0100,x
-		jsr reversenibble
-		sta uipal+$0100,x
-		lda uipal+$0200,x
-		jsr reversenibble
-		sta uipal+$0200,x
-		inx
-		bne :-
-		rts
-
 jpg_rendinit
+		lda #$00
+		sta $d020
+		lda #$00
+		sta $d021
+
 		lda #40*2										; logical chars per row
 		sta $d058
 		lda #$00
@@ -66,21 +61,41 @@ jpg_rendinit
 		sta $d070
 
 		ldx #$00
-:		txa
+:		lda jpg_rend_foo,x
 		jsr reversenibble
-		sta $d100,x
-		sta $d200,x
-		sta $d300,x
-		inx
+		ldy #$00
+:
+jpgrir	sta $d100
+		inc jpgrir+1
+		iny
+		cpy #36
 		bne :-
+		inx
+		cpx #6
+		bne :--
 
-		;lda #$ff										; red signifies transparency
-		;jsr reversenibble
-		;sta $d1ff
-		;lda #$00
-		;jsr reversenibble
-		;sta $d2ff
-		;sta $d3ff
+		ldx #$00
+:		lda jpg_rend_foo,x
+		jsr reversenibble
+		ldy #$00
+:
+jpgrig	sta $d200
+		inc jpgrig+1
+		iny
+		cpy #6
+		bne :-
+		inx
+		cpx #36
+		bne :--
+
+		ldx #$00
+:		lda jpg_rend_foo,x
+		jsr reversenibble
+jpgrib	sta $d300
+		inc jpgrib+1
+		inx
+		cpx #216
+		bne :-
 
 		lda $d070
 		and #%11001111									; clear bits 4 and 5 (BTPALSEL) so bitmap uses palette 0
@@ -150,6 +165,20 @@ put1	sty screen+1									; plot right of 2 chars
 		;adc #0
 		;sta put1+2
 
+		; initialize multiply units
+
+		lda #$00
+		sta $d770
+		sta $d771
+		sta $d772
+		sta $d773
+
+		lda #$00
+		sta $d774
+		sta $d775
+		sta $d776
+		sta $d777
+
 		jmp put0
 
 endscreenplot
@@ -202,17 +231,39 @@ jpgrnd_scan_loop
 
 jpgrend_getrgb
 
+		phy
+
 jpgrnd_red
 		lda $babe,x
+		tay
+		lda jpg_snaptable,y
+		sta $d770
+		lda #36
+		sta $d774
+		lda $d778+0
 		sta jpg_rend_red
+
 jpgrnd_green
 		lda $babe,x
+		tay
+		lda jpg_snaptable,y
+		sta $d770
+		lda #6
+		sta $d774
+		lda $d778+0
 		sta jpg_rend_green
+
 jpgrnd_blue
 		lda $babe,x
-		sta jpg_rend_blue
+		tay
+		lda jpg_snaptable,y
+		clc
+		adc jpg_rend_green
+		clc
+		adc jpg_rend_red
 
-		jsr jpgrend_getnearestindex
+		ply
+
 		sta [uidraw_scrptr],z
 
 		inz
@@ -296,39 +347,8 @@ jpgrnd_blue
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
-jpgrend_nearestindex	.byte 0
-
-jpgrend_getnearestindex
-
-		lda #$00
-		sta jpgrend_nearestindex
-
-/*
-		phx
-
-		ldx #$00
-:		lda jpg_rend_red
-		cmp uipal+0*$0100,x
-		lda jpg_rend_green
-		cmp uipal+1*$0100,x
-		lda jpg_rend_blue
-		cmp uipal+2*$0100,x
-		inx
-		bne :-
-
-		plx
-*/
-
-		lda jpg_rend_red
-		sta jpgrend_nearestindex
-
-		lda jpgrend_nearestindex
-
-		rts
-		
-; ----------------------------------------------------------------------------------------------------------------------------------------
-
 jpg_bayer_matrix
+/*
 		.byte  37, 139,  63, 165,  37, 139,  63, 165
 		.byte 190,  88, 216, 114, 190,  88, 216, 114
 		.byte  63, 165,  37, 139,  63, 165,  37, 139
@@ -337,6 +357,42 @@ jpg_bayer_matrix
 		.byte 190,  88, 216, 114, 190,  88, 216, 114
 		.byte  63, 165,  37, 139,  63, 165,  37, 139
 		.byte 216, 114, 190,  88, 216, 114, 190,  88
+*/
+		.byte 128, 237, 156, 255, 128, 237, 156, 255
+		.byte 255, 182, 255, 210, 255, 182, 255, 210
+		.byte 156, 255, 128, 237, 156, 255, 128, 237
+		.byte 255, 210, 255, 182, 255, 210, 255, 182
+		.byte 128, 237, 156, 255, 128, 237, 156, 255
+		.byte 255, 182, 255, 210, 255, 182, 255, 210
+		.byte 156, 255, 128, 237, 156, 255, 128, 237
+		.byte 255, 210, 255, 182, 255, 210, 255, 182
+
+
+; 37, 63, 88, 114, 139, 165, 190, 216
+
+		; R*36 + G*6 + B
+
+jpg_snaptable
+		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+		.byte 0,0,0,0,0,0,0,0,0,0
+		.byte 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+		.byte 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+		.byte 1,1,1,1,1,1,1,1,1,1
+		.byte 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+		.byte 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+		.byte 2,2,2,2,2,2,2,2,2,2
+		.byte 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
+		.byte 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
+		.byte 3,3,3,3,3,3,3,3,3,3
+		.byte 4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+		.byte 4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+		.byte 4,4,4,4,4,4,4,4,4,4
+		.byte 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+		.byte 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5
+		.byte 5,5,5,5,5,5,5,5,5,5
+
+		.byte 5,5,5,5
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
