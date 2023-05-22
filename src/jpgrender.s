@@ -396,6 +396,15 @@ jpg_snaptable
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
+jpg_render_irq
+
+		jmp main_restart
+
+		inc $d020
+		jmp *-3
+
+; ----------------------------------------------------------------------------------------------------------------------------------------
+
 jpgrender_clearcolorramjob
 				.byte $0a										; Request format (f018a = 11 bytes (Command MSB is $00), f018b is 12 bytes (Extra Command MSB))
 				.byte $80, $00									; source megabyte   ($0000000 >> 20) ($00 is  chip ram)

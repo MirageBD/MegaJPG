@@ -475,10 +475,16 @@ jpg_process
 jpg_err1
 		;UICORE_CALLELEMENTFUNCTION la1listbox, uilistbox_draw
 
-		lda #$a0
+		lda #$00
 		sta $d020
+		ldx #$00
+:		dex
+		bne :-
 		lda #$e0
 		sta $d020
+		ldx #$00
+:		dex
+		bne :-
 		jmp jpg_err1
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------

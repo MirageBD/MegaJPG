@@ -146,6 +146,7 @@ entry_main
 		FLOPPY_FAST_LOAD $8100,				$30, $38
 		jsr fl_exit
 
+main_restart
 		sei
 
 		lda #$35
