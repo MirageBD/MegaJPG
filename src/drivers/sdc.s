@@ -7,6 +7,8 @@ sdc_bytecounterlo	.byte 0
 sdc_bytecounterhi	.byte 0
 sdc_sectorcount		.byte 0
 
+sdc_filedescriptor	.byte 0
+
 ; ----------------------------------------------------------------------------------------------------
 
 sdc_opendir
@@ -22,6 +24,7 @@ sdc_opendir
 		bcc sdc_opendir_error
 
 		tax												; transfer the directory file descriptor into X
+		stx sdc_filedescriptor
 		ldy #>sdc_transferbuffer						; set Y to the MSB of the transfer area
 
 sdcod1	lda #$14										; hyppo_readdir - read the directory entry
@@ -143,6 +146,7 @@ sdc_openfile_error
 
 sdc_closefile
 
+		ldx sdc_filedescriptor
 		lda #$20										; Preconditions: The file descriptor given in the X register was opened using hyppo_openfile.
 		sta $d640
 		clv
