@@ -35,11 +35,11 @@ jpg_rendinit
 		lda #$00
 		sta $d059
 
-		lda #%00000000									; set H640, V400
+		lda #%00000000									; set H320, V200
 		sta $d031
 
 		lda #$00
-		sta $d05b										; Set display to V400
+		sta $d05b										; Set display to V200
 		lda #25
 		sta $d07b										; Display 25 rows of text
 
@@ -60,33 +60,36 @@ jpg_rendinit
 		and #%00111111
 		sta $d070
 
-		ldx #$00
-:		lda jpg_rend_foo,x
-		jsr reversenibble
-		ldy #$00
-:
-jpgrir	sta $d100
-		inc jpgrir+1
-		iny
-		cpy #36
-		bne :-
-		inx
-		cpx #6
-		bne :--
+		lda #$00
+		sta jpgrir+1
+		sta jpgrig+1
+		sta jpgrib+1
 
 		ldx #$00
 :		lda jpg_rend_foo,x
 		jsr reversenibble
 		ldy #$00
-:
+jpgrir	sta $d100
+		inc jpgrir+1
+		iny
+		cpy #36
+		bne jpgrir
+		inx
+		cpx #6
+		bne :-
+
+		ldx #$00
+:		lda jpg_rend_foo,x
+		jsr reversenibble
+		ldy #$00
 jpgrig	sta $d200
 		inc jpgrig+1
 		iny
 		cpy #6
-		bne :-
+		bne jpgrig
 		inx
 		cpx #36
-		bne :--
+		bne :-
 
 		ldx #$00
 :		lda jpg_rend_foo,x
@@ -106,6 +109,15 @@ jpgrib	sta $d300
 		lda #$00
 		sta screencolumn
 		sta screenrow
+
+		lda #<(screen+0)
+		sta put0+1
+		lda #>(screen+0)
+		sta put0+2
+		lda #<(screen+1)
+		sta put1+1
+		lda #>(screen+1)
+		sta put1+2
 
 		ldx #<(jpgdata/64)								; char to plot
 		ldy #>(jpgdata/64)
@@ -398,10 +410,33 @@ jpg_snaptable
 
 jpg_render_irq
 
-		jmp main_restart
+		php
+		pha
+		phx
+		phy
+		phz
+		
+		lda main_event
+		beq :+
 
-		inc $d020
-		jmp *-3
+		;inc $d020
+
+:		jsr mouse_update
+		jsr keyboard_update
+
+		lda mouse_released
+		beq :+
+
+		lda #$02
+		sta main_event
+
+:		plz
+		ply
+		plx
+		pla
+		plp
+		asl $d019
+		rti
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 

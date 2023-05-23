@@ -5,6 +5,7 @@
 
 sdc_bytecounterlo	.byte 0
 sdc_bytecounterhi	.byte 0
+sdc_sectorcount		.byte 0
 
 ; ----------------------------------------------------------------------------------------------------
 
@@ -51,7 +52,7 @@ sdc_opendir_error
 
 :		lda #$06
 		sta $d020
-		lda #$07
+		lda #$87
 		sta $d020
 		jmp :-
 
@@ -107,6 +108,13 @@ sdc_loadfile
 
 sdc_openfile
 
+		lda #$00
+		sta sdc_bytecounterlo
+		sta sdc_bytecounterhi
+
+		lda #$ff
+		sta sdc_sectorcount
+
 		ldy #>sdc_transferbuffer						; set the hyppo filename from transferbuffer
 		lda #$2e
 		sta $d640
@@ -144,6 +152,7 @@ sdc_closefile
 
 sdc_readsector
 
+		inc sdc_sectorcount
 														; assume the file is already open.		
 		lda $d030										; unmap the colour RAM from $dc00 because that will prevent us from mapping in the sector buffer
 		pha

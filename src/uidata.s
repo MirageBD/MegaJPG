@@ -85,28 +85,9 @@ userfunc_openfile
 		jsr uifilebox_draw
 		rts
 
-:		jsr sdc_openfile
-		jsr sdc_readsector
-
-		jsr jpg_process
-
-		jsr sdc_closefile
-
+:
 		lda #$01
-		sta $d012
-		lda #<jpg_render_irq
-		sta $fffe
-		lda #>jpg_render_irq
-		sta $ffff
-
-		plz
-		ply
-		plx
-		pla
-		plp
-		asl $d019
-		rti
-
+		sta main_event
 		rts
 
 ; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -428,6 +428,7 @@ jpg_process
 		sta jpg_error
 		sta jpg_eof
 		sta jpg_skipff
+		sta jpg_nbits
 
 		lda #$ff
 		sta jpg_filepos+0
@@ -610,7 +611,7 @@ jpg_row		.byte 0
 jpg_rowoff	.byte 0				; row offset
 
 jpg_marker_sos
-		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_sos
+		;UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_sos
 
 		dec jpg_skipff								; skip $ff bytes
 		
@@ -739,7 +740,7 @@ jpg_sos_done
 jpg_cres	.word 0
 
 jpg_marker_dri										; lame restart interval markers
-		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dri
+		;UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dri
 
 		jsr sdc_getbyte
 		sta jpg_reslen+1
@@ -778,7 +779,7 @@ jpg_restartdecoder
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 
 jpg_marker_dqt
-		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dqt
+		;UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dqt
 
 jpg_marker_dqt_start
 		jsr jpg_decrease_headerlength
@@ -838,7 +839,7 @@ jpg_hufflen			.byte 0
 
 
 jpg_marker_dht
-		UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dht
+		;UICORE_SETLISTBOXTEXT la1listbox, uitxt_marker_dht
 
 jpg_marker_dht_start
 		jsr jpg_decrease_headerlength
@@ -1093,7 +1094,7 @@ jpg_headerlength	.word 0							; lo, hi
 ;   z set -> end of file
 
 jpg_getheader
-		UICORE_SETLISTBOXTEXT la1listbox, uitxt_jpgheader
+		;UICORE_SETLISTBOXTEXT la1listbox, uitxt_jpgheader
 
 		lda #00
 		sta jpg_header+0

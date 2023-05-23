@@ -169,7 +169,8 @@ main_restart
 
 		lda #$00										; disable IRQ raster interrupts because C65 uses raster interrupts in the ROM
 		sta $d01a
-
+		sta main_event
+		
 		lda #$ff										; setup IRQ interrupt
 		sta $d012
 		lda #<irq1
@@ -184,8 +185,27 @@ main_restart
 		
 loop
 
-		lda $d020
+		lda main_event
+		cmp #$01
+		beq load_image
+		cmp #$02
+		beq main_restart
 		jmp loop
+
+load_image
+		jsr sdc_openfile
+		jsr sdc_readsector
+
+		jsr jpg_process
+
+		jsr sdc_closefile
+
+		lda #0
+		sta main_event
+		jmp loop
+
+main_event
+		.byte 0
 
 ; ----------------------------------------------------------------------------------------------------
 
@@ -205,7 +225,17 @@ irq1
 		lda #$00
 .endif
 		sta $d012
-		lda #<irq1
+
+		lda main_event
+		beq :+
+
+		lda #<jpg_render_irq
+		sta $fffe
+		lda #>jpg_render_irq
+		sta $ffff
+		bra :++
+
+:		lda #<irq1
 		sta $fffe
 		lda #>irq1
 		sta $ffff
@@ -216,7 +246,7 @@ irq1
 		;lda #>irq2
 		;sta $ffff
 
-		plz
+:		plz
 		ply
 		plx
 		pla
