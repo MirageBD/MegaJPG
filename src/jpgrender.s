@@ -25,11 +25,6 @@ reversenibble
 		rts
 
 jpg_rendinit
-		lda #$00
-		sta $d020
-		lda #$00
-		sta $d021
-
 		lda #40*2										; logical chars per row
 		sta $d058
 		lda #$00
@@ -53,6 +48,7 @@ jpg_rendinit
 		sta $d063
 
 		DMA_RUN_JOB jpgrender_clearcolorramjob
+		DMA_RUN_JOB jpgrender_clearbitmapjob
 
 		; --------------------------------------------- set palette
 
@@ -105,6 +101,12 @@ jpgrib	sta $d300
 		sta $d070
 
 		; --------------------------------------------- end set palette
+
+		; safe to set screen colours, now that the palette has changed
+		lda #$00
+		sta $d020
+		lda #$00
+		sta $d021
 
 		lda #$00
 		sta screencolumn
@@ -510,3 +512,42 @@ jpgrender_clearcolorramjob
 				.word $0000
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
+
+jpgrender_clearbitmapjob
+				.byte $0a										; Request format (f018a = 11 bytes (Command MSB is $00), f018b is 12 bytes (Extra Command MSB))
+				.byte $80, $00									; source megabyte   ($0000000 >> 20) ($00 is  chip ram)
+				.byte $81, (jpgdata) >> 20						; dest megabyte   ($0000000 >> 20) ($00 is  chip ram)
+				.byte $84, $00									; Destination skip rate (256ths of bytes)
+				.byte $85, $01									; Destination skip rate (whole bytes)
+
+				.byte $00										; No more options
+
+																; 12 byte DMA List structure starts here
+				.byte %00000111									; Command LSB
+																;     0–1 DMA Operation Type (Only Copy and Fill implemented at the time of writing)
+																;             %00 = Copy
+																;             %01 = Mix (via MINTERMs)
+																;             %10 = Swap
+																;             %11 = Fill
+																;       2 Chain (i.e., another DMA list follows)
+																;       3 Yield to interrupts
+																;       4 MINTERM -SA,-DA bit
+																;       5 MINTERM -SA, DA bit
+																;       6 MINTERM  SA,-DA bit
+																;       7 MINTERM  SA, DA bit
+
+				.word 320*200									; Count LSB + Count MSB
+
+				.word $0000										; this is normally the source addres, but contains the fill value now
+				.byte $00										; source bank (ignored)
+
+				.word (jpgdata) & $ffff							; Destination Address LSB + Destination Address MSB
+				.byte (((jpgdata) >> 16) & $0f)					; Destination Address BANK and FLAGS (copy to rbBaseMem)
+																;     0–3 Memory BANK within the selected MB (0-15)
+																;       4 HOLD,      i.e., do not change the address
+																;       5 MODULO,    i.e., apply the MODULO field to wraparound within a limited memory space
+																;       6 DIRECTION. If set, then the address is decremented instead of incremented.
+																;       7 I/O.       If set, then I/O registers are visible during the DMA controller at $D000 – $DFFF.
+				;.byte %00000000									; Command MSB
+
+				.word $0000
