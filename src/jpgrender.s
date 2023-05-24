@@ -9,104 +9,13 @@ jpg_rend_foo
 			.byte 0, 51, 102, 153, 204, 255
 		.endrepeat
 
-reversenibble
-		sta reversenibble_tmp
-		lsr
-		lsr
-		lsr
-		lsr
-		sta reversenibble_tmp2
-		lda reversenibble_tmp
-		asl
-		asl
-		asl
-		asl
-		ora reversenibble_tmp2
-		rts
-
 jpg_rendinit
-		lda #40*2										; logical chars per row
-		sta $d058
-		lda #$00
-		sta $d059
-
-		lda #%00000000									; set H320, V200
-		sta $d031
 
 		lda #$00
-		sta $d05b										; Set display to V200
-		lda #25
-		sta $d07b										; Display 25 rows of text
+		sta $d015
 
-		lda #<screen									; set pointer to screen ram
-		sta $d060
-		lda #>screen
-		sta $d061
-		lda #(screen & $ff0000) >> 16
-		sta $d062
-		lda #$00
-		sta $d063
-
-		DMA_RUN_JOB jpgrender_clearcolorramjob
 		DMA_RUN_JOB jpgrender_clearbitmapjob
-
-		; --------------------------------------------- set palette
-
-		lda $d070										; select mapped bank with the upper 2 bits of $d070
-		and #%00111111
-		sta $d070
-
-		lda #$00
-		sta jpgrir+1
-		sta jpgrig+1
-		sta jpgrib+1
-
-		ldx #$00
-:		lda jpg_rend_foo,x
-		jsr reversenibble
-		ldy #$00
-jpgrir	sta $d100
-		inc jpgrir+1
-		iny
-		cpy #36
-		bne jpgrir
-		inx
-		cpx #6
-		bne :-
-
-		ldx #$00
-:		lda jpg_rend_foo,x
-		jsr reversenibble
-		ldy #$00
-jpgrig	sta $d200
-		inc jpgrig+1
-		iny
-		cpy #6
-		bne jpgrig
-		inx
-		cpx #36
-		bne :-
-
-		ldx #$00
-:		lda jpg_rend_foo,x
-		jsr reversenibble
-jpgrib	sta $d300
-		inc jpgrib+1
-		inx
-		cpx #216
-		bne :-
-
-		lda $d070
-		and #%11001111									; clear bits 4 and 5 (BTPALSEL) so bitmap uses palette 0
-		sta $d070
-
-		; --------------------------------------------- end set palette
-
-		; safe to set screen colours, now that the palette has changed
-		lda #$00
-		sta $d020
-		lda #$00
-		sta $d021
+		DMA_RUN_JOB jpgrender_clearcolorramjob
 
 		lda #$00
 		sta screencolumn
@@ -163,21 +72,18 @@ put1	sty screen+1									; plot right of 2 chars
 		cmp #25
 		beq endscreenplot
 
-		;clc												; add 4 to get to next row
-		;lda put0+1
-		;adc #04
-		;sta put0+1
-		;lda put0+2
-		;adc #0
-		;sta put0+2
+		lda #40*2										; logical chars per row
+		sta $d058
+		lda #$00
+		sta $d059
 
-		;clc												; add 4 to get to next row
-		;lda put1+1
-		;adc #04
-		;sta put1+1
-		;lda put1+2
-		;adc #0
-		;sta put1+2
+		lda #%00000000									; set H320, V200
+		sta $d031
+
+		lda #$01
+		sta $d05b										; Set display to V200
+		lda #25
+		sta $d07b										; Display 25 rows of text
 
 		; initialize multiply units
 
@@ -273,8 +179,8 @@ jpgrnd_blue
 		lda jpg_snaptable,y
 		clc
 		adc jpg_rend_green
-		clc
 		adc jpg_rend_red
+		adc #$27										; add 27 to get to front of 216 web palette
 
 		ply
 
@@ -381,11 +287,6 @@ jpg_bayer_matrix
 		.byte 156, 255, 128, 237, 156, 255, 128, 237
 		.byte 255, 210, 255, 182, 255, 210, 255, 182
 
-
-; 37, 63, 88, 114, 139, 165, 190, 216
-
-		; R*36 + G*6 + B
-
 jpg_snaptable
 		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 		.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -427,6 +328,13 @@ jpg_render_irq
 		jsr keyboard_update
 
 		lda mouse_released
+		beq :+
+
+		lda #$02
+		sta main_event
+		bra :++
+
+:		lda keyboard_shouldsendreleaseevent
 		beq :+
 
 		lda #$02

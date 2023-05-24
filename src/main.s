@@ -161,6 +161,25 @@ main_restart
 		jsr ui_init										; initialise UI
 		jsr ui_setup
 
+		jsr keyboard_update
+
+		lda #<fa1filebox
+		sta uikeyboard_focuselement+0
+		lda #>fa1filebox
+		sta uikeyboard_focuselement+1
+
+		lda filebox1_stored_startpos+0
+		sta fa1scrollbar_data+2
+		lda filebox1_stored_startpos+1
+		sta fa1scrollbar_data+3
+
+		lda filebox1_stored_selection+0
+		sta fa1scrollbar_data+4
+		lda filebox1_stored_selection+1
+		sta fa1scrollbar_data+5
+
+		UICORE_CALLELEMENTFUNCTION fa1filebox, uifilebox_draw
+
 		lda #$7f										; disable CIA interrupts
 		sta $dc0d
 		sta $dd0d

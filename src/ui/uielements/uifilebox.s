@@ -49,7 +49,7 @@ uifilebox_keypress_end
 		rts
 
 uifilebox_keyrelease
-		jsr uilistbox_keyrelease
+		;jsr uilistbox_keyrelease
 		rts
 
 uifilebox_opendir
@@ -229,7 +229,7 @@ uifilebox_processdirentry
 		cmp #%00010000
 		bne :+
 
-		lda #$31											; colour directory differently
+		lda #$ed											; colour directory differently
 		bra :++
 :		lda #$0f
 :		sta (zpptrtmp),y

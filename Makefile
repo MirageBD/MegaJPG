@@ -120,7 +120,7 @@ $(EXE_DIR)/boot.prg: $(EXE_DIR)/boot.o Linkfile
 	$(SED) $(CONVERTVICEMAP) < $(EXE_DIR)/boot.maptemp > boot.map
 	$(SED) $(CONVERTVICEMAP) < $(EXE_DIR)/boot.maptemp > boot.list
 
-$(EXE_DIR)/disk.d81: $(EXE_DIR)/boot.prg $(BIN_DIR)/font_chars1.bin $(BIN_DIR)/glyphs_chars1.bin $(BIN_DIR)/cursor_sprites1.bin $(BIN_DIR)/kbcursor_sprites1.bin
+$(EXE_DIR)/megajpeg.d81: $(EXE_DIR)/boot.prg $(BIN_DIR)/font_chars1.bin $(BIN_DIR)/glyphs_chars1.bin $(BIN_DIR)/cursor_sprites1.bin $(BIN_DIR)/kbcursor_sprites1.bin
 	$(RM) $@
 	$(CC1541) -n "megajpg" -i " 2023" -d 19 -v\
 	 \
@@ -138,19 +138,19 @@ $(EXE_DIR)/disk.d81: $(EXE_DIR)/boot.prg $(BIN_DIR)/font_chars1.bin $(BIN_DIR)/g
 
 # -----------------------------------------------------------------------------
 
-run: $(EXE_DIR)/disk.d81
+run: $(EXE_DIR)/megajpeg.d81
 
 ifeq ($(megabuild), 1)
 
 	m65 -l COM3 -F
 	mega65_ftp.exe -l COM3 -s 2000000 -c "cd /" \
-	-c "put D:\Mega\MegaJPG\exe\disk.d81 megaui.d81"
+	-c "put D:\Mega\MegaJPG\exe\megajpeg.d81 megajpg.d81"
 
 	m65 -l COM3 -F
 	m65 -l COM3 -T 'list'
 	m65 -l COM3 -T 'list'
 	m65 -l COM3 -T 'list'
-	m65 -l COM3 -T 'mount "megaui.d81"'
+	m65 -l COM3 -T 'mount "megajpg.d81"'
 	m65 -l COM3 -T 'load "$$"'
 	m65 -l COM3 -T 'list'
 	m65 -l COM3 -T 'list'
@@ -165,7 +165,7 @@ endif
 else
 
 #	cmd.exe /c $(XMEGA65) -mastervolume 50 -autoload -8 $(EXE_DIR)/disk.d81
-	cmd.exe /c $(XMEGA65) -autoload -8 $(EXE_DIR)/disk.d81
+	cmd.exe /c $(XMEGA65) -autoload -8 $(EXE_DIR)/megajpeg.d81
 
 endif
 

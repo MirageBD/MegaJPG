@@ -14,31 +14,18 @@ windows
 ; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ child windows
 
 window0area
-		UIELEMENT_ADD fa1nineslice,				nineslice,			filearea1elements,		 1,  0, 38, 17,  0,		$ffff,						uidefaultflags
-		UIELEMENT_ADD la1nineslice,				nineslice,			listarea1elements,		 1, 20, 78, 20,  0,		$ffff,						uidefaultflags
+		UIELEMENT_ADD fa1nineslice,				nineslice,			filearea1elements,		 21,  1, 38, 47,  0,	$ffff,						uidefaultflags
 		UIELEMENT_END
 
 ; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ scrollbar elements
 
 filearea1elements
-		UIELEMENT_ADD fa1filebox,				filebox,			$ffff,					 3,  2, -7, -4,  0,		fa1filebox_data,			uidefaultflags
+		UIELEMENT_ADD fa1filebox,				filebox,			$ffff,					 2,  2, -7, -4,  0,		fa1filebox_data,			uidefaultflags
 		UIELEMENT_ADD fa1scrollbartrack,		scrolltrack,		$ffff,					-3,  2,  2, -4,  0,		fa1scrollbar_data,			uidefaultflags
 		UIELEMENT_END
 
-; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ scrollbar elements
-
-listarea1elements
-		UIELEMENT_ADD la1listbox,				listbox,			$ffff,					 2,  2, -6, -4,  0,		la1listbox_data,			uidefaultflags
-		UIELEMENT_ADD la1scrollbartrack,		scrolltrack,		$ffff,					-3,  2,  2, -4,  0,		la1scrollbar_data,			uidefaultflags
-		UIELEMENT_END
-
-; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ scrollbar elements
-
-fa1scrollbar_data			.word fa1scrollbar_functions, 										0, 0, 20, fa1filebox			; start position, selection index, number of entries, ptr to list
-fa1filebox_data				.word fa1scrollbar_functions,			filebox1_functions,			fa1scrollbar_data, fa1boxtxt, fa1directorytxt
-
-la1scrollbar_data			.word la1scrollbar_functions, 										0, 0, 32, la1listbox			; start position, selection index, number of entries, ptr to list
-la1listbox_data				.word la1scrollbar_functions,			listbox1_functions,			la1scrollbar_data, la1boxtxt
+fa1scrollbar_data			.word fa1scrollbar_functions, 									0, 0, 20, fa1filebox			; start position, selection index, number of entries, ptr to list
+fa1filebox_data				.word fa1scrollbar_functions,			filebox1_functions,		fa1scrollbar_data, fa1boxtxt, fa1directorytxt
 
 ; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ listeners
 
@@ -49,14 +36,23 @@ fa1scrollbar_functions			.word fa1scrollbartrack,				uiscrolltrack_draw
 filebox1_functions				.word fa1filebox,						userfunc_openfile
 								.word $ffff
 
-la1scrollbar_functions			.word la1scrollbartrack,				uiscrolltrack_draw
-								.word la1listbox,						uilistbox_draw
-								.word $ffff
-
-listbox1_functions				;.word la1listbox,						userfunc_openfile
-								.word $ffff
-
 ; ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+filebox1_stored_startpos	.word 0
+filebox1_stored_selection	.word 0
+
+filebox1_store_selection
+		lda fa1scrollbar_data+2
+		sta filebox1_stored_startpos+0
+		lda fa1scrollbar_data+3
+		sta filebox1_stored_startpos+1
+
+		lda fa1scrollbar_data+4
+		sta filebox1_stored_selection+0
+		lda fa1scrollbar_data+5
+		sta filebox1_stored_selection+1
+
+		rts
 
 userfunc_openfile
 
@@ -86,6 +82,8 @@ userfunc_openfile
 		rts
 
 :
+		jsr filebox1_store_selection
+
 		lda #$01
 		sta main_event
 		rts
