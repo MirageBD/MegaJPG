@@ -32,7 +32,7 @@ GCC				= gcc
 MC				= MegaConvert
 ADDADDR			= addaddr
 MEGAMOD			= MegaMod
-XMEGA65			= F:\xemu\xmega65.exe
+XMEGA65			= H:\xemu\xmega65.exe
 
 CONVERTBREAK	= 's/al [0-9A-F]* \.br_\([a-z]*\)/\0\nbreak \.br_\1/'
 CONVERTWATCH	= 's/al [0-9A-F]* \.wh_\([a-z]*\)/\0\nwatch store \.wh_\1/'

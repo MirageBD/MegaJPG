@@ -124,10 +124,11 @@ jpg_rend_column		.byte 0
 
 jpg_render
 
+		;lda #$00
 		sta jpgrnd_red+1
 		sta jpgrnd_green+1
 		sta jpgrnd_blue+1
-		tya
+		tya												; y is either $84 or $8e (jpg_imgbuf or jpg_imgbuf + $1400/2)
 		clc
 		adc #>(0*jpg_channelbufsize)
 		sta jpgrnd_red+2
@@ -263,7 +264,8 @@ jpgrnd_blue
 		beq :+
 		jmp jpgrnd_column_loop
 
-:		rts
+:		
+		rts
 
 ; ----------------------------------------------------------------------------------------------------------------------------------------
 

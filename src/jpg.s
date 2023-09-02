@@ -91,7 +91,7 @@ jpg_reslen				.word 0						; lame restart markers
 .define jpg_veclo		$8380						; vec to be quantized
 .define jpg_vechi		$83c0
 
-.define jpg_imgbuf		$8400						; image data buffer $8700+3*$1300=$c000
+.define jpg_imgbuf		$8400						; image data buffer $8400+3*$1400=$c000
 
 .define jpg_huffmem		$c000						; huffman trees ($c000-$c570)
 
@@ -102,9 +102,9 @@ jpg_reslen				.word 0						; lame restart markers
 
 .define jpg_imgbufsize	3*jpg_channelbufsize
 
-.define jpg_ybuf		jpg_imgbuf+0*jpg_channelbufsize			; $8700
-.define jpg_cbbuf		jpg_imgbuf+1*jpg_channelbufsize			; $9a00
-.define jpg_crbuf		jpg_imgbuf+2*jpg_channelbufsize			; $ad00
+.define jpg_ybuf		jpg_imgbuf+0*jpg_channelbufsize			; $8400
+.define jpg_cbbuf		jpg_imgbuf+1*jpg_channelbufsize			; $9800
+.define jpg_crbuf		jpg_imgbuf+2*jpg_channelbufsize			; $ac00
 
 .define jpg_point		$02
 .define jpg_dest		$04
